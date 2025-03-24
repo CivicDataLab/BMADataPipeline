@@ -184,11 +184,16 @@ fetch_data = ApiToPostgresOperator(
    - View container logs: `docker-compose logs -f <service_name>`
    - Restart services: `docker-compose restart <service_name>`
 
-2. **Database Connection Issues**
+2. **Permission Issues (Windows Users)**
+   - If you encounter permission errors with `/opt/airflow` directories, ensure the `AIRFLOW_UID` and `AIRFLOW_GID` environment variables are set in your `.env` file
+   - Default values (50000:50000) are provided in the `.env.example` file
+   - These settings ensure the container user has proper permissions to access mounted volumes
+
+3. **Database Connection Issues**
    - Ensure your database credentials are correct in the .env file
    - For Docker setup, make sure the PostgreSQL container is running
    - Check network connectivity between containers
 
-3. **API Connection Issues**
+4. **API Connection Issues**
    - Verify API credentials in the .env file
    - Check API endpoint URLs in your DAG files

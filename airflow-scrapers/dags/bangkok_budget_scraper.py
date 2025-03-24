@@ -242,7 +242,7 @@ fetch_bangkok_budget = ApiToPostgresOperator(
     params=default_api_params,
     transform_func=transform_bangkok_budget_data,
     auth_callable=get_auth_for_bangkok_api,
-    db_type='bma',
+    db_type='BMA',
     dag=dag,
 )
 
