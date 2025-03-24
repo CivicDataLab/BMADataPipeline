@@ -184,16 +184,23 @@ fetch_data = ApiToPostgresOperator(
    - View container logs: `docker-compose logs -f <service_name>`
    - Restart services: `docker-compose restart <service_name>`
 
-2. **Permission Issues (Windows Users)**
-   - If you encounter permission errors with `/opt/airflow` directories, ensure the `AIRFLOW_UID` and `AIRFLOW_GID` environment variables are set in your `.env` file
-   - Default values (50000:50000) are provided in the `.env.example` file
-   - These settings ensure the container user has proper permissions to access mounted volumes
+2. **Permission Issues**
+   - If you encounter permission errors with `/opt/airflow` directories:
+     - The logs directory uses a named volume (`airflow-logs`) to avoid permission issues
+     - For Windows users: ensure Docker Desktop is up-to-date
+     - For Linux/Ubuntu users: you may need to run `mkdir -p ./logs && chmod -R 777 ./logs` before starting containers
 
-3. **Database Connection Issues**
+3. **Logging Configuration Issues**
+   - If you see errors like `Unable to configure handler 'processor'`:
+     - Make sure the `airflow.cfg` file has the correct logging configuration
+     - Ensure the logs directory is properly mounted as a named volume in `docker-compose.yaml`
+     - Try removing any existing logs with `docker-compose down -v` and then restart
+
+4. **Database Connection Issues**
    - Ensure your database credentials are correct in the .env file
    - For Docker setup, make sure the PostgreSQL container is running
    - Check network connectivity between containers
 
-4. **API Connection Issues**
+5. **API Connection Issues**
    - Verify API credentials in the .env file
    - Check API endpoint URLs in your DAG files

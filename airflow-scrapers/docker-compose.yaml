@@ -23,10 +23,10 @@ services:
       - postgres
     entrypoint: ["/bin/bash", "-c", "airflow db migrate && airflow users create --username \"${AIRFLOW_ADMIN_USERNAME:-admin}\" --firstname \"${AIRFLOW_ADMIN_FIRSTNAME:-Admin}\" --lastname \"${AIRFLOW_ADMIN_LASTNAME:-User}\" --role Admin --email \"${AIRFLOW_ADMIN_EMAIL:-admin@example.com}\" --password \"${AIRFLOW_ADMIN_PASSWORD:-admin}\" && airflow webserver"]
     environment:
-      - AIRFLOW_HOME=/opt/airflow
+      - AIRFLOW_HOME=${AIRFLOW_HOME:-/opt/airflow}
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__FERNET_KEY=${FERNET_KEY}
-      - PYTHONPATH=/opt/airflow
+      - PYTHONPATH=${AIRFLOW_HOME:-/opt/airflow}
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
@@ -48,12 +48,12 @@ services:
       - AIRFLOW_ADMIN_EMAIL=${AIRFLOW_ADMIN_EMAIL}
       - AIRFLOW_ADMIN_PASSWORD=${AIRFLOW_ADMIN_PASSWORD}
     volumes:
-      - ./dags:/opt/airflow/dags
-      - ./logs:/opt/airflow/logs
-      - ./plugins:/opt/airflow/plugins
-      - ./include:/opt/airflow/include
-      - ./config:/opt/airflow/config
-      - ./config/airflow.cfg:/opt/airflow/airflow.cfg
+      - ./dags:${AIRFLOW_HOME:-/opt/airflow}/dags
+      - airflow-logs:${AIRFLOW_HOME:-/opt/airflow}/logs
+      - ./plugins:${AIRFLOW_HOME:-/opt/airflow}/plugins
+      - ./include:${AIRFLOW_HOME:-/opt/airflow}/include
+      - ./config:${AIRFLOW_HOME:-/opt/airflow}/config
+      - ./config/airflow.cfg:${AIRFLOW_HOME:-/opt/airflow}/airflow.cfg
     ports:
       - "8080:8080"
     command: webserver
@@ -70,9 +70,10 @@ services:
     depends_on:
       - webserver
     environment:
-      - AIRFLOW_HOME=/opt/airflow
+      - AIRFLOW_HOME=${AIRFLOW_HOME:-/opt/airflow}
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__FERNET_KEY=${FERNET_KEY}
+      - PYTHONPATH=${AIRFLOW_HOME:-/opt/airflow}
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
@@ -94,13 +95,15 @@ services:
       - AIRFLOW_ADMIN_EMAIL=${AIRFLOW_ADMIN_EMAIL}
       - AIRFLOW_ADMIN_PASSWORD=${AIRFLOW_ADMIN_PASSWORD}
     volumes:
-      - ./dags:/opt/airflow/dags
-      - ./logs:/opt/airflow/logs
-      - ./plugins:/opt/airflow/plugins
-      - ./include:/opt/airflow/include
-      - ./config:/opt/airflow/config
-      - ./config/airflow.cfg:/opt/airflow/airflow.cfg
+      - ./dags:${AIRFLOW_HOME:-/opt/airflow}/dags
+      - airflow-logs:${AIRFLOW_HOME:-/opt/airflow}/logs
+      - ./plugins:${AIRFLOW_HOME:-/opt/airflow}/plugins
+      - ./include:${AIRFLOW_HOME:-/opt/airflow}/include
+      - ./config:${AIRFLOW_HOME:-/opt/airflow}/config
+      - ./config/airflow.cfg:${AIRFLOW_HOME:-/opt/airflow}/airflow.cfg
     command: scheduler
 
 volumes:
   postgres-db-volume:
+  airflow-logs:
+    driver: local
