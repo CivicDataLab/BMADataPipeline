@@ -1,0 +1,250 @@
+from datetime import datetime, timedelta
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+import os
+import sys
+import json
+import logging
+from dotenv import load_dotenv
+from sqlalchemy import String, Integer, Float, Text, DateTime, JSON
+from sqlalchemy.dialects.postgresql import JSONB
+
+# Add the plugins and include directories to the path
+airflow_home = os.environ.get('AIRFLOW_HOME', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.join(airflow_home, 'plugins'))
+sys.path.append(os.path.join(airflow_home, 'include'))
+
+# Import custom operators and utilities
+from operators.api_to_postgres_operator import ApiToPostgresOperator
+from api_utils import get_bma_api_auth
+
+# Load environment variables
+load_dotenv()
+
+# Default arguments for DAG
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 3,
+    'retry_delay': timedelta(minutes=5),
+}
+
+# Define the DAG
+dag = DAG(
+    'bangkok_budget_scraper',
+    default_args=default_args,
+    description='Scrape Bangkok budget data from connect.bangkok.go.th API',
+    schedule_interval='0 0 * * *',  # Daily at midnight
+    start_date=datetime(2025, 3, 22),
+    catchup=False,
+    tags=['api', 'postgres', 'bangkok', 'budget'],
+)
+
+# Function to transform the budget data before saving to database
+def transform_bangkok_budget_data(data):
+    """
+    Transform the Bangkok budget data before saving to database
+    
+    Args:
+        data: Raw budget data from the API
+        
+    Returns:
+        Transformed data ready for database insertion
+    """
+    transformed_data = []
+    
+    for item in data:
+        # Convert numeric strings to float where appropriate
+        try:
+            net_amt = float(item.get('net_amt', 0))
+        except (ValueError, TypeError):
+            net_amt = 0.0
+            
+        # Create a transformed record
+        transformed_record = {
+            'department_name': item.get('department_name', ''),
+            'sector_name': item.get('sector_name', ''),
+            'program_name': item.get('program_name', ''),
+            'func_name': item.get('func_name', ''),
+            'expenditure_name': item.get('expenditure_name', ''),
+            'subobject_name': item.get('subobject_name', ''),
+            'func_id': item.get('func_id', ''),
+            'func_year': item.get('func_year', ''),
+            'func_seq': item.get('func_seq', ''),
+            'exp_object_id': item.get('exp_object_id', ''),
+            'exp_subobject_id': item.get('exp_subobject_id', ''),
+            'expenditure_id': item.get('expenditure_id', ''),
+            'item_id': item.get('item_id', ''),
+            'detail': item.get('detail', ''),
+            'approve_on_hand': item.get('approve_on_hand', ''),
+            'allot_approve': item.get('allot_approve', ''),
+            'allot_date': item.get('allot_date', ''),
+            'agr_date': item.get('agr_date', ''),
+            'open_date': item.get('open_date', ''),
+            'acc_date': item.get('acc_date', ''),
+            'acc_amt': item.get('acc_amt', ''),
+            'sgn_date': item.get('sgn_date', ''),
+            'st_sgn_date': item.get('st_sgn_date', ''),
+            'end_sgn_date': item.get('end_sgn_date', ''),
+            'last_rcv_date': item.get('last_rcv_date', ''),
+            'vendor_type_id': item.get('vendor_type_id', ''),
+            'vendor_no': item.get('vendor_no', ''),
+            'vendor_description': item.get('vendor_description', ''),
+            'pay_total_amt': item.get('pay_total_amt', ''),
+            'fin_dept_amt': item.get('fin_dept_amt', ''),
+            'net_amt': net_amt,
+            'pur_hire_status': item.get('pur_hire_status', ''),
+            'pur_hire_status_name': item.get('pur_hire_status_name', ''),
+            'contract_id': item.get('contract_id', ''),
+            'purchasing_department': item.get('purchasing_department', ''),
+            'contract_name': item.get('contract_name', ''),
+            'contract_amount': item.get('contract_amount', ''),
+            'pur_hire_method': item.get('pur_hire_method', ''),
+            'egp_project_code': item.get('egp_project_code', ''),
+            'egp_po_control_code': item.get('egp_po_control_code', ''),
+            'raw_data': json.dumps(item)  # Convert the dictionary to a JSON string
+        }
+        
+        transformed_data.append(transformed_record)
+    
+    return transformed_data
+
+# Function to create the bangkok_budget table if it doesn't exist
+def create_bangkok_budget_table(**kwargs):
+    """
+    Create the bangkok_budget table in PostgreSQL if it doesn't exist
+    """
+    db_host = os.getenv('POSTGRES_HOST', 'localhost')
+    db_port = os.getenv('POSTGRES_PORT', '5432')
+    db_name = os.getenv('POSTGRES_DB', 'airflow')
+    db_user = os.getenv('POSTGRES_USER', 'airflow')
+    db_password = os.getenv('POSTGRES_PASSWORD', 'airflow')
+    
+    # Create SQLAlchemy engine
+    from sqlalchemy import create_engine, MetaData, Table, Column, inspect
+    
+    engine = create_engine(f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}')
+    metadata = MetaData()
+    
+    # Define the budget table
+    budget_table = Table(
+        'bangkok_budget',
+        metadata,
+        Column('id', Integer, primary_key=True),
+        Column('department_name', String(255)),
+        Column('sector_name', String(255)),
+        Column('program_name', String(255)),
+        Column('func_name', String(255)),
+        Column('expenditure_name', String(255)),
+        Column('subobject_name', String(255)),
+        Column('func_id', String(50)),
+        Column('func_year', String(50)),
+        Column('func_seq', String(50)),
+        Column('exp_object_id', String(50)),
+        Column('exp_subobject_id', String(50)),
+        Column('expenditure_id', String(50)),
+        Column('item_id', String(50)),
+        Column('detail', Text),
+        Column('approve_on_hand', String(255)),
+        Column('allot_approve', String(255)),
+        Column('allot_date', String(50)),
+        Column('agr_date', String(50)),
+        Column('open_date', String(50)),
+        Column('acc_date', String(50)),
+        Column('acc_amt', String(255)),
+        Column('sgn_date', String(50)),
+        Column('st_sgn_date', String(50)),
+        Column('end_sgn_date', String(50)),
+        Column('last_rcv_date', String(50)),
+        Column('vendor_type_id', String(50)),
+        Column('vendor_no', String(50)),
+        Column('vendor_description', String(255)),
+        Column('pay_total_amt', String(255)),
+        Column('fin_dept_amt', String(255)),
+        Column('net_amt', Float),
+        Column('pur_hire_status', String(50)),
+        Column('pur_hire_status_name', String(255)),
+        Column('contract_id', String(50)),
+        Column('purchasing_department', String(255)),
+        Column('contract_name', Text),
+        Column('contract_amount', String(255)),
+        Column('pur_hire_method', String(255)),
+        Column('egp_project_code', String(50)),
+        Column('egp_po_control_code', String(50)),
+        Column('created_at', DateTime, default=datetime.utcnow),
+        Column('updated_at', DateTime, default=datetime.utcnow, onupdate=datetime.utcnow),
+        Column('raw_data', JSONB)
+    )
+    
+    # Create the table if it doesn't exist
+    inspector = inspect(engine)
+    if not inspector.has_table('bangkok_budget'):
+        metadata.create_all(engine)
+        logging.info("Created bangkok_budget table")
+        
+        # Create indexes for better query performance
+        with engine.connect() as conn:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bangkok_budget_department_name ON bangkok_budget(department_name);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bangkok_budget_sector_name ON bangkok_budget(sector_name);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bangkok_budget_func_id ON bangkok_budget(func_id);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bangkok_budget_contract_id ON bangkok_budget(contract_id);")
+    else:
+        logging.info("bangkok_budget table already exists")
+
+
+
+# Function to get authentication for the Bangkok API
+def get_auth_for_bangkok_api(**kwargs):
+    """
+    Get basic authentication credentials for the Bangkok API
+    
+    Returns:
+        Tuple of (username, password) for basic authentication
+    """
+    return get_bma_api_auth()
+
+# Define the task to create the bangkok_budget table
+create_table = PythonOperator(
+    task_id='create_bangkok_budget_table',
+    python_callable=create_bangkok_budget_table,
+    dag=dag,
+)
+
+# Default API parameters - can be overridden by Airflow variables or at runtime
+from airflow.models import Variable
+
+default_api_params = {
+    'source_id': '01',
+    'book_id': '0',
+    'fiscal_year': '68',
+    'department_id': '11000000',
+    'exp_object_id': '07'
+}
+
+# Try to get parameters from Airflow variables, fall back to defaults if not found
+try:
+    # Get parameters from Airflow variables if they exist
+    bangkok_params = Variable.get('bangkok_budget_params', deserialize_json=True, default_var=None)
+    if bangkok_params:
+        # Update default parameters with values from Airflow variables
+        default_api_params.update(bangkok_params)
+except:
+    # If there's an error (e.g., Variable doesn't exist), use defaults
+    logging.info('Using default Bangkok budget parameters')
+
+# Define the API task for Bangkok budget data
+fetch_bangkok_budget = ApiToPostgresOperator(
+    task_id='fetch_bangkok_budget',
+    api_url='https://connect.bangkok.go.th/misbudget/bmabudget',
+    table_name='bangkok_budget',
+    params=default_api_params,
+    transform_func=transform_bangkok_budget_data,
+    auth_callable=get_auth_for_bangkok_api,
+    db_type='bma',
+    dag=dag,
+)
+
+# Set task dependencies
+create_table >> fetch_bangkok_budget
