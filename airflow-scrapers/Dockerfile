@@ -2,12 +2,18 @@ FROM apache/airflow:2.7.2-python3.8
 
 USER root
 
+# Create logs directory and set permissions
+RUN mkdir -p /opt/airflow/logs && \
+  chown -R airflow:root /opt/airflow/logs && \
+  chmod -R 775 /opt/airflow/logs
+
+
 # Install system dependencies
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-         build-essential \
-         libffi-dev \
-         libpq-dev \
+  build-essential \
+  libffi-dev \
+  libpq-dev \
   && apt-get autoremove -yqq --purge \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
@@ -22,7 +28,7 @@ COPY constraints-python3.8.txt /constraints-python3.8.txt
 
 # Upgrade pip and install requirements
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r /requirements.txt
+  pip install --no-cache-dir -r /requirements.txt
 
 # Set the AIRFLOW_HOME environment variable
 ENV AIRFLOW_HOME=/opt/airflow
