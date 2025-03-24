@@ -33,6 +33,14 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Set the AIRFLOW_HOME environment variable
 ENV AIRFLOW_HOME=/opt/airflow
 
+# Create directories with proper permissions
+USER root
+RUN mkdir -p ${AIRFLOW_HOME}/dags ${AIRFLOW_HOME}/logs ${AIRFLOW_HOME}/plugins ${AIRFLOW_HOME}/include ${AIRFLOW_HOME}/config && \
+    chown -R airflow:root ${AIRFLOW_HOME}/dags ${AIRFLOW_HOME}/logs ${AIRFLOW_HOME}/plugins ${AIRFLOW_HOME}/include ${AIRFLOW_HOME}/config && \
+    chmod -R 777 ${AIRFLOW_HOME}/logs
+
+USER airflow
+
 # Copy plugins, dags, and include directories
 COPY --chown=airflow:root plugins/ ${AIRFLOW_HOME}/plugins/
 COPY --chown=airflow:root dags/ ${AIRFLOW_HOME}/dags/
