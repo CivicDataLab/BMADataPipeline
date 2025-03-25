@@ -17,6 +17,7 @@ sys.path.append(os.path.join(airflow_home, 'include'))
 # Import custom operators and utilities
 from operators.api_to_postgres_operator import ApiToPostgresOperator
 from api_utils import get_bma_api_auth
+from superset_utils import create_superset_dataset
 
 # Load environment variables
 load_dotenv()
@@ -256,5 +257,31 @@ fetch_bangkok_budget = ApiToPostgresOperator(
     dag=dag,
 )
 
+# Task to create Superset dataset after data is loaded
+def create_superset_dataset_task(**kwargs):
+    """
+    Create a Superset dataset for the bangkok_budget table
+    """
+    table_name = 'bangkok_budget'
+    db_type = 'BMA'
+    schema = 'public'
+    
+    logging.info(f"Creating Superset dataset for {table_name} using db_type={db_type}")
+    success = create_superset_dataset(table_name, db_type, schema)
+    
+    if success:
+        logging.info(f"Successfully created Superset dataset for {table_name}")
+    else:
+        logging.warning(f"Failed to create Superset dataset for {table_name}")
+        # Don't fail the DAG if Superset dataset creation fails
+        # This ensures the data pipeline continues to work even if Superset is down
+
+# Define the task to create the Superset dataset
+create_superset_dataset_op = PythonOperator(
+    task_id='create_superset_dataset',
+    python_callable=create_superset_dataset_task,
+    dag=dag,
+)
+
 # Set task dependencies
-create_table >> fetch_bangkok_budget
+create_table >> fetch_bangkok_budget >> create_superset_dataset_op
