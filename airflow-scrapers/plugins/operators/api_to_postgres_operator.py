@@ -115,10 +115,11 @@ class ApiToPostgresOperator(BaseOperator):
             # Log success or failure
             if result['status'] == 'success':
                 self.logger.info(f"Successfully processed {result.get('records_processed', 0)} records")
+                return result
             else:
-                self.logger.error(f"Failed to process API data: {result.get('message', 'Unknown error')}")
-            
-            return result
+                error_msg = f"Failed to process API data: {result.get('message', 'Unknown error')}"
+                self.logger.error(error_msg)
+                raise Exception(error_msg)
             
         except Exception as e:
             self.logger.error(f"Error in ApiToPostgresOperator: {str(e)}")

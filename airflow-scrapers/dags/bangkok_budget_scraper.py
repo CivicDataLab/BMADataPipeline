@@ -55,60 +55,70 @@ def transform_bangkok_budget_data(data):
     """
     transformed_data = []
     
+    # Add debug logging
+    logging.info(f"Received {len(data)} items from the API")
+    if len(data) > 0:
+        logging.info(f"First item keys: {list(data[0].keys())}")
+    
     for item in data:
         # Convert numeric strings to float where appropriate
         try:
-            net_amt = float(item.get('net_amt', 0))
+            # Handle uppercase field names in the API response
+            net_amt = float(item.get('NET_AMT', item.get('net_amt', 0)))
         except (ValueError, TypeError):
             net_amt = 0.0
             
         # Create a transformed record
         transformed_record = {
-            'department_name': item.get('department_name', ''),
-            'sector_name': item.get('sector_name', ''),
-            'program_name': item.get('program_name', ''),
-            'func_name': item.get('func_name', ''),
-            'expenditure_name': item.get('expenditure_name', ''),
-            'subobject_name': item.get('subobject_name', ''),
-            'func_id': item.get('func_id', ''),
-            'func_year': item.get('func_year', ''),
-            'func_seq': item.get('func_seq', ''),
-            'exp_object_id': item.get('exp_object_id', ''),
-            'exp_subobject_id': item.get('exp_subobject_id', ''),
-            'expenditure_id': item.get('expenditure_id', ''),
-            'item_id': item.get('item_id', ''),
-            'detail': item.get('detail', ''),
-            'approve_on_hand': item.get('approve_on_hand', ''),
-            'allot_approve': item.get('allot_approve', ''),
-            'allot_date': item.get('allot_date', ''),
-            'agr_date': item.get('agr_date', ''),
-            'open_date': item.get('open_date', ''),
-            'acc_date': item.get('acc_date', ''),
-            'acc_amt': item.get('acc_amt', ''),
-            'sgn_date': item.get('sgn_date', ''),
-            'st_sgn_date': item.get('st_sgn_date', ''),
-            'end_sgn_date': item.get('end_sgn_date', ''),
-            'last_rcv_date': item.get('last_rcv_date', ''),
-            'vendor_type_id': item.get('vendor_type_id', ''),
-            'vendor_no': item.get('vendor_no', ''),
-            'vendor_description': item.get('vendor_description', ''),
-            'pay_total_amt': item.get('pay_total_amt', ''),
-            'fin_dept_amt': item.get('fin_dept_amt', ''),
+            'department_name': item.get('DEPARTMENT_NAME', item.get('department_name', '')),
+            'sector_name': item.get('SECTOR_NAME', item.get('sector_name', '')),
+            'program_name': item.get('PROGRAM_NAME', item.get('program_name', '')),
+            'func_name': item.get('FUNC_NAME', item.get('func_name', '')),
+            'expenditure_name': item.get('EXPENDITURE_NAME', item.get('expenditure_name', '')),
+            'subobject_name': item.get('SUBOBJECT_NAME', item.get('subobject_name', '')),
+            'func_id': item.get('FUNC_ID', item.get('func_id', '')),
+            'func_year': item.get('FUNC_YEAR', item.get('func_year', '')),
+            'func_seq': item.get('FUNC_SEQ', item.get('func_seq', '')),
+            'exp_object_id': item.get('EXP_OBJECT_ID', item.get('exp_object_id', '')),
+            'exp_subobject_id': item.get('EXP_SUBOBJECT_ID', item.get('exp_subobject_id', '')),
+            'expenditure_id': item.get('EXPENDITURE_ID', item.get('expenditure_id', '')),
+            'item_id': item.get('ITEM_ID', item.get('item_id', '')),
+            'detail': item.get('DETAIL', item.get('detail', '')),
+            'approve_on_hand': item.get('APPROVE_ON_HAND', item.get('approve_on_hand', '')),
+            'allot_approve': item.get('ALLOT_APPROVE', item.get('allot_approve', '')),
+            'allot_date': item.get('ALLOT_DATE', item.get('allot_date', '')),
+            'agr_date': item.get('AGR_DATE', item.get('agr_date', '')),
+            'open_date': item.get('OPEN_DATE', item.get('open_date', '')),
+            'acc_date': item.get('ACC_DATE', item.get('acc_date', '')),
+            'acc_amt': item.get('ACC_AMT', item.get('acc_amt', '')),
+            'sgn_date': item.get('SGN_DATE', item.get('sgn_date', '')),
+            'st_sgn_date': item.get('ST_SGN_DATE', item.get('st_sgn_date', '')),
+            'end_sgn_date': item.get('END_SGN_DATE', item.get('end_sgn_date', '')),
+            'last_rcv_date': item.get('LAST_RCV_DATE', item.get('last_rcv_date', '')),
+            'vendor_type_id': item.get('VENDOR_TYPE_ID', item.get('vendor_type_id', '')),
+            'vendor_no': item.get('VENDOR_NO', item.get('vendor_no', '')),
+            'vendor_description': item.get('VENDOR_DESCRIPTION', item.get('vendor_description', '')),
+            'pay_total_amt': item.get('PAY_TOTAL_AMT', item.get('pay_total_amt', '')),
+            'fin_dept_amt': item.get('FIN_DEPT_AMT', item.get('fin_dept_amt', '')),
             'net_amt': net_amt,
-            'pur_hire_status': item.get('pur_hire_status', ''),
-            'pur_hire_status_name': item.get('pur_hire_status_name', ''),
-            'contract_id': item.get('contract_id', ''),
-            'purchasing_department': item.get('purchasing_department', ''),
-            'contract_name': item.get('contract_name', ''),
-            'contract_amount': item.get('contract_amount', ''),
-            'pur_hire_method': item.get('pur_hire_method', ''),
-            'egp_project_code': item.get('egp_project_code', ''),
-            'egp_po_control_code': item.get('egp_po_control_code', ''),
+            'pur_hire_status': item.get('PUR_HIRE_STATUS', item.get('pur_hire_status', '')),
+            'pur_hire_status_name': item.get('PUR_HIRE_STATUS_NAME', item.get('pur_hire_status_name', '')),
+            'contract_id': item.get('CONTRACT_ID', item.get('contract_id', '')),
+            'purchasing_department': item.get('PURCHASING_DEPARTMENT', item.get('purchasing_department', '')),
+            'contract_name': item.get('CONTRACT_NAME', item.get('contract_name', '')),
+            'contract_amount': item.get('CONTRACT_AMOUNT', item.get('contract_amount', '')),
+            'pur_hire_method': item.get('PUR_HIRE_METHOD', item.get('pur_hire_method', '')),
+            'egp_project_code': item.get('EGP_PROJECT_CODE', item.get('egp_project_code', '')),
+            'egp_po_control_code': item.get('EGP_PO_CONTROL_CODE', item.get('egp_po_control_code', '')),
             'raw_data': json.dumps(item)  # Convert the dictionary to a JSON string
         }
         
         transformed_data.append(transformed_record)
     
+    if not transformed_data:
+        raise ValueError("No data was transformed. Check the API response structure.")
+        
+    logging.info(f"Transformed {len(transformed_data)} records")
     return transformed_data
 
 # Function to create the bangkok_budget table if it doesn't exist

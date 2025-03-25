@@ -345,12 +345,53 @@ def api_to_db_pipeline(api_url: str, table_name: str, headers: Optional[Dict[str
                 cookies=cookies,
                 auth=auth
             )
-            data = response.json()
-            if data_key and data_key in data:
+            
+            # Check for HTTP errors
+            if response.status_code >= 400:
+                error_msg = f"API request failed with status code {response.status_code}: {response.text}"
+                logger.error(error_msg)
+                return {
+                    'status': 'error',
+                    'message': error_msg,
+                    'status_code': response.status_code
+                }
+                
+            # Parse JSON response
+            try:
+                data = response.json()
+                logger.info(f"API response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dictionary'}")                
+            except Exception as json_err:
+                error_msg = f"Failed to parse JSON response: {str(json_err)}. Response: {response.text[:200]}..."
+                logger.error(error_msg)
+                return {
+                    'status': 'error',
+                    'message': error_msg
+                }
+                
+            # Extract data from response if data_key is provided
+            if data_key and isinstance(data, dict) and data_key in data:
                 data = data[data_key]
+                logger.info(f"Extracted {len(data) if isinstance(data, list) else 'non-list'} data using key '{data_key}'")
         
+        # Validate data before saving
+        if not data:
+            error_msg = "API returned empty data"
+            logger.error(error_msg)
+            return {
+                'status': 'error',
+                'message': error_msg
+            }
+            
         # Save data to database
-        save_api_response_to_db(data, table_name, transform_func, db_type)
+        try:
+            save_api_response_to_db(data, table_name, transform_func, db_type)
+        except Exception as db_err:
+            error_msg = f"Error saving data to database: {str(db_err)}"
+            logger.error(error_msg)
+            return {
+                'status': 'error',
+                'message': error_msg
+            }
         
         return {
             'status': 'success',
