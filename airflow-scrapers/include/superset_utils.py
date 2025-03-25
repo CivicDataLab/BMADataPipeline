@@ -30,6 +30,7 @@ class SupersetAPI:
         self.password = password or os.getenv('SUPERSET_PASSWORD', 'admin')
         self.access_token = None
         self.csrf_token = None
+        self.cookies = None
     
     def login(self) -> bool:
         """
@@ -39,25 +40,59 @@ class SupersetAPI:
             True if login successful, False otherwise
         """
         try:
+            # First, get a CSRF token from the session endpoint
+            session_url = f"{self.base_url}/api/v1/security/csrf_token/"
+            session_response = requests.get(session_url)
+            
+            if session_response.status_code != 200:
+                logger.error(f"Failed to get initial CSRF token: {session_response.text}")
+                return False
+                
+            initial_csrf_token = session_response.json().get('result')
+            cookies = session_response.cookies
+            
+            # Now login with the CSRF token
             login_url = f"{self.base_url}/api/v1/security/login"
             payload = {
                 "username": self.username,
                 "password": self.password,
                 "provider": "db"
             }
-            response = requests.post(login_url, json=payload)
+            
+            headers = {
+                "Content-Type": "application/json",
+                "X-CSRFToken": initial_csrf_token
+            }
+            
+            response = requests.post(
+                login_url, 
+                json=payload, 
+                headers=headers, 
+                cookies=cookies
+            )
             
             if response.status_code == 200:
                 data = response.json()
                 self.access_token = data.get('access_token')
-                # Get CSRF token
+                
+                # Store cookies from the login response
+                self.cookies = response.cookies
+                
+                # Get a fresh CSRF token using the access token
                 csrf_response = requests.get(
                     f"{self.base_url}/api/v1/security/csrf_token/", 
-                    headers={"Authorization": f"Bearer {self.access_token}"}
+                    headers={"Authorization": f"Bearer {self.access_token}"},
+                    cookies=self.cookies
                 )
+                
                 if csrf_response.status_code == 200:
                     self.csrf_token = csrf_response.json().get('result')
+                    # Update cookies
+                    self.cookies = csrf_response.cookies
+                    logger.info(f"Successfully logged in to Superset and obtained CSRF token")
                     return True
+                else:
+                    logger.error(f"Failed to get CSRF token after login: {csrf_response.text}")
             
             logger.error(f"Failed to login to Superset: {response.text}")
             return False
@@ -72,8 +107,10 @@ class SupersetAPI:
         Returns:
             Headers dictionary
         """
-        if not self.access_token:
-            self.login()
+        if not self.access_token or not self.csrf_token:
+            if not self.login():
+                logger.error("Failed to obtain authentication credentials")
+                return {}
             
         return {
             "Authorization": f"Bearer {self.access_token}",
@@ -94,7 +131,8 @@ class SupersetAPI:
         try:
             response = requests.get(
                 f"{self.base_url}/api/v1/database/",
-                headers=self.get_headers()
+                headers=self.get_headers(),
+                cookies=self.cookies
             )
             
             if response.status_code == 200:
@@ -122,7 +160,8 @@ class SupersetAPI:
         try:
             response = requests.get(
                 f"{self.base_url}/api/v1/dataset/",
-                headers=self.get_headers()
+                headers=self.get_headers(),
+                cookies=self.cookies
             )
             
             if response.status_code == 200:
@@ -171,6 +210,7 @@ class SupersetAPI:
             response = requests.post(
                 f"{self.base_url}/api/v1/dataset/",
                 headers=self.get_headers(),
+                cookies=self.cookies,
                 json=payload
             )
             
