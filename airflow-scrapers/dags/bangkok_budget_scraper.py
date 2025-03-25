@@ -126,11 +126,11 @@ def create_bangkok_budget_table(**kwargs):
     """
     Create the bangkok_budget table in PostgreSQL if it doesn't exist
     """
-    db_host = os.getenv('POSTGRES_HOST', 'localhost')
-    db_port = os.getenv('POSTGRES_PORT', '5432')
-    db_name = os.getenv('POSTGRES_DB', 'airflow')
-    db_user = os.getenv('POSTGRES_USER', 'airflow')
-    db_password = os.getenv('POSTGRES_PASSWORD', 'airflow')
+    db_host = os.getenv('BMA_DB_HOST', os.getenv('POSTGRES_HOST', 'localhost'))
+    db_port = os.getenv('BMA_DB_PORT', os.getenv('POSTGRES_PORT', '5432'))
+    db_name = os.getenv('BMA_DB_NAME', os.getenv('POSTGRES_DB', 'airflow'))
+    db_user = os.getenv('BMA_DB_USER', os.getenv('POSTGRES_USER', 'airflow'))
+    db_password = os.getenv('BMA_DB_PASSWORD', os.getenv('POSTGRES_PASSWORD', 'airflow'))
     
     # Create SQLAlchemy engine
     from sqlalchemy import create_engine, MetaData, Table, Column, inspect
