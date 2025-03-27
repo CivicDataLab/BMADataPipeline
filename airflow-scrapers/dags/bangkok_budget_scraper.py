@@ -18,7 +18,7 @@ sys.path.append(os.path.join(airflow_home, 'include'))
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from include.api_utils import get_bma_api_auth
 from include.superset_utils import create_superset_dataset
-#Hello, some dummy test to check if its working or not!
+
 
 # Load environment variables
 load_dotenv()
