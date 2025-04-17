@@ -1,3 +1,7 @@
+from airflow.models import Variable
+from include.superset_utils import create_superset_dataset
+from include.api_utils import get_bma_api_auth
+from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -10,14 +14,12 @@ from sqlalchemy import String, Integer, Float, Text, DateTime, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 
 # Add the plugins and include directories to the path
-airflow_home = os.environ.get('AIRFLOW_HOME', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+airflow_home = os.environ.get('AIRFLOW_HOME', os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.join(airflow_home, 'plugins'))
 sys.path.append(os.path.join(airflow_home, 'include'))
 
 # Import custom operators and utilities
-from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
-from include.api_utils import get_bma_api_auth
-from include.superset_utils import create_superset_dataset
 
 
 # Load environment variables
@@ -45,23 +47,25 @@ dag = DAG(
 )
 
 # Function to transform the budget data before saving to database
+
+
 def transform_bangkok_budget_data(data):
     """
     Transform the Bangkok budget data before saving to database
-    
+
     Args:
         data: Raw budget data from the API
-        
+
     Returns:
         Transformed data ready for database insertion
     """
     transformed_data = []
-    
+
     # Add debug logging
     logging.info(f"Received {len(data)} items from the API")
     if len(data) > 0:
         logging.info(f"First item keys: {list(data[0].keys())}")
-    
+
     for item in data:
         # Convert numeric strings to float where appropriate
         try:
@@ -69,7 +73,7 @@ def transform_bangkok_budget_data(data):
             net_amt = float(item.get('NET_AMT', item.get('net_amt', 0)))
         except (ValueError, TypeError):
             net_amt = 0.0
-            
+
         # Create a transformed record
         transformed_record = {
             'department_name': item.get('DEPARTMENT_NAME', item.get('department_name', '')),
@@ -112,18 +116,22 @@ def transform_bangkok_budget_data(data):
             'pur_hire_method': item.get('PUR_HIRE_METHOD', item.get('pur_hire_method', '')),
             'egp_project_code': item.get('EGP_PROJECT_CODE', item.get('egp_project_code', '')),
             'egp_po_control_code': item.get('EGP_PO_CONTROL_CODE', item.get('egp_po_control_code', '')),
-            'raw_data': json.dumps(item)  # Convert the dictionary to a JSON string
+            # Convert the dictionary to a JSON string
+            'raw_data': json.dumps(item)
         }
-        
+
         transformed_data.append(transformed_record)
-    
+
     if not transformed_data:
-        raise ValueError("No data was transformed. Check the API response structure.")
-        
+        raise ValueError(
+            "No data was transformed. Check the API response structure.")
+
     logging.info(f"Transformed {len(transformed_data)} records")
     return transformed_data
 
 # Function to create the bangkok_budget table if it doesn't exist
+
+
 def create_bangkok_budget_table(**kwargs):
     """
     Create the bangkok_budget table in PostgreSQL if it doesn't exist
@@ -132,14 +140,16 @@ def create_bangkok_budget_table(**kwargs):
     db_port = os.getenv('BMA_DB_PORT', os.getenv('POSTGRES_PORT', '5432'))
     db_name = os.getenv('BMA_DB_NAME', os.getenv('POSTGRES_DB', 'airflow'))
     db_user = os.getenv('BMA_DB_USER', os.getenv('POSTGRES_USER', 'airflow'))
-    db_password = os.getenv('BMA_DB_PASSWORD', os.getenv('POSTGRES_PASSWORD', 'airflow'))
-    
+    db_password = os.getenv('BMA_DB_PASSWORD', os.getenv(
+        'POSTGRES_PASSWORD', 'airflow'))
+
     # Create SQLAlchemy engine
     from sqlalchemy import create_engine, MetaData, Table, Column, inspect
-    
-    engine = create_engine(f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}')
+
+    engine = create_engine(
+        f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}')
     metadata = MetaData()
-    
+
     # Define the budget table
     budget_table = Table(
         'bangkok_budget',
@@ -186,36 +196,41 @@ def create_bangkok_budget_table(**kwargs):
         Column('egp_project_code', String(50)),
         Column('egp_po_control_code', String(50)),
         Column('created_at', DateTime, default=datetime.utcnow),
-        Column('updated_at', DateTime, default=datetime.utcnow, onupdate=datetime.utcnow),
+        Column('updated_at', DateTime, default=datetime.utcnow,
+               onupdate=datetime.utcnow),
         Column('raw_data', JSONB)
     )
-    
+
     # Create the table if it doesn't exist
     inspector = inspect(engine)
     if not inspector.has_table('bangkok_budget'):
         metadata.create_all(engine)
         logging.info("Created bangkok_budget table")
-        
+
         # Create indexes for better query performance
         with engine.connect() as conn:
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_bangkok_budget_department_name ON bangkok_budget(department_name);")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_bangkok_budget_sector_name ON bangkok_budget(sector_name);")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_bangkok_budget_func_id ON bangkok_budget(func_id);")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_bangkok_budget_contract_id ON bangkok_budget(contract_id);")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bangkok_budget_department_name ON bangkok_budget(department_name);")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bangkok_budget_sector_name ON bangkok_budget(sector_name);")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bangkok_budget_func_id ON bangkok_budget(func_id);")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bangkok_budget_contract_id ON bangkok_budget(contract_id);")
     else:
         logging.info("bangkok_budget table already exists")
-
 
 
 # Function to get authentication for the Bangkok API
 def get_auth_for_bangkok_api(**kwargs):
     """
     Get basic authentication credentials for the Bangkok API
-    
+
     Returns:
         Tuple of (username, password) for basic authentication
     """
     return get_bma_api_auth()
+
 
 # Define the task to create the bangkok_budget table
 create_table = PythonOperator(
@@ -225,7 +240,6 @@ create_table = PythonOperator(
 )
 
 # Default API parameters - can be overridden by Airflow variables or at runtime
-from airflow.models import Variable
 
 default_api_params = {
     'source_id': '01',
@@ -238,7 +252,8 @@ default_api_params = {
 # Try to get parameters from Airflow variables, fall back to defaults if not found
 try:
     # Get parameters from Airflow variables if they exist
-    bangkok_params = Variable.get('bangkok_budget_params', deserialize_json=True, default_var=None)
+    bangkok_params = Variable.get(
+        'bangkok_budget_params', deserialize_json=True, default_var=None)
     if bangkok_params:
         # Update default parameters with values from Airflow variables
         default_api_params.update(bangkok_params)
@@ -259,6 +274,8 @@ fetch_bangkok_budget = ApiToPostgresOperator(
 )
 
 # Task to create Superset dataset after data is loaded
+
+
 def create_superset_dataset_task(**kwargs):
     """
     Create a Superset dataset for the bangkok_budget table
@@ -266,16 +283,18 @@ def create_superset_dataset_task(**kwargs):
     table_name = 'bangkok_budget'
     db_type = 'BMA'
     schema = 'public'
-    
-    logging.info(f"Creating Superset dataset for {table_name} using db_type={db_type}")
+
+    logging.info(
+        f"Creating Superset dataset for {table_name} using db_type={db_type}")
     success = create_superset_dataset(table_name, db_type, schema)
-    
+
     if success:
         logging.info(f"Successfully created Superset dataset for {table_name}")
     else:
         logging.warning(f"Failed to create Superset dataset for {table_name}")
         # Don't fail the DAG if Superset dataset creation fails
         # This ensures the data pipeline continues to work even if Superset is down
+
 
 # Define the task to create the Superset dataset
 create_superset_dataset_op = PythonOperator(
