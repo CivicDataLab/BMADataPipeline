@@ -118,7 +118,7 @@ def create_table_if_not_exists(table_name: str, columns: Dict[str, Any], db_type
     return table
 
 
-def insert_data_to_db(table_name: str, data: Any, db_type=None):
+def insert_data_to_db(table_name: str, data: Dict[str, Any], db_type=None):
     """
     Insert data into a PostgreSQL table
 
