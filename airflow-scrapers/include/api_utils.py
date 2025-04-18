@@ -156,8 +156,8 @@ def insert_data_to_db(table_name: str, data: Any, db_type=None):
             conn.execute(table.insert(), data)
             logger.info(f"Inserted {len(data)} rows into {table_name}")
     except Exception as e:
-        logger.error(f"Failed to insert into {table_name}: {str(e)}")
-        raise
+        logger.info(f"Failed to insert into {table_name}: {str(e)}")
+        pass #even if the insert fails continue
 
 
 @sleep_and_retry

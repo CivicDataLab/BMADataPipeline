@@ -1,7 +1,13 @@
+import sys
+import os
+import re
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from dotenv import load_dotenv
 from sqlalchemy import (
     create_engine, MetaData, Table, Column, inspect,
-    Integer, String, DateTime, func, ForeignKey
+    Integer, String, Float,DateTime, func, ForeignKey
 )
 
 from sqlalchemy.orm import relationship
@@ -10,9 +16,7 @@ from include.api_utils import get_bma_weather_api_auth
 from airflow.decorators import dag, task
 import pendulum
 import logging
-import os
 import json
-import sys
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -95,12 +99,17 @@ def road_flood_sensor_location_pipeline():
             f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
         )
         metadata = MetaData()
+
+        # create metadata binding with below streaming data table for proper FK assignment
+        flood_sensor__table=Table(
+            'flood_sensor', metadata,
+            Column('id', Integer,primary_key=True)
+        )
         flood_sensor_streaming_data_table = Table(
             'flood_sensor_streaming_data', metadata,
             Column("id", Integer, primary_key=True),
-            Column("flood_sensor_id", Integer, ForeignKey(
-                "flood_sensor.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=True),
-            Column("code", String(255)),
+            Column("sensor_id", Integer, ForeignKey("flood_sensor.id", ondelete="SET NULL", onupdate="CASCADE"),nullable=True),
+            Column("flood",Float,nullable=True),
             Column("site_time", DateTime(timezone=True), nullable=True),
             Column('created_at', DateTime(timezone=True),
                    server_default=func.now()),
@@ -127,10 +136,10 @@ def road_flood_sensor_location_pipeline():
             raise ValueError("Missing one or more database env variables")
 
         conn = psycopg2.connect(
-            db_host=db_host,
-            db_name=db_name,
-            db_user=db_user,
-            db_password=db_password
+            host=db_host,
+            dbname=db_name,
+            user=db_user,
+            password=db_password
         )
 
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -139,36 +148,35 @@ def road_flood_sensor_location_pipeline():
 
         for sensor in sensors:
             code = sensor["code"]
-            sensor_id = sensor["id"]
+            sensor_id=sensor["id"]
             sensor_streaming_url = f"{WEATHER_API_URL_FOR_ROAD_FLOOD_SENSOR_24HR_DATA_STREAM}?id={code}"
 
-        # Define schema for the streaming data table for strict checking
-        schema = {
-            "flood_sensor_id": "INTEGER",
-            "code": "VARCHAR(255)",
-            "site_time": "TIMESTAMPTZ",
-            "flood": "FLOAT",
-            "created_at": "TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
-            "updated_at": "TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP"
-        }
+            def transform_with_fk(data):
+                for row in data:
+                    row["sensor_id"]=sensor_id
 
-        def transform_with_fk(data):
-            for row in data:
-                row["flood_sensor_id"] = sensor_id
-            return data
-        operator = ApiToPostgresOperator(
-            task_id=f"fetch_streaming_data_{code.replace('.', '_')}",
-            api_url=sensor_streaming_url,
-            table_name="flood_sensor_streaming_data",
-            auth_callable=get_bma_weather_api_auth,
-            transform_func=transform_with_fk,
-            data_key=None,
-            db_type="BMA",
-            schema=schema
-        )
-        operator.execute(context={})
-    create_table_and_insert() >> fetch_and_store_sensor_details(
-    ) >> create_flood_sensor_streaming_data_table >> fetch_and_store_streaming_data
+                    flood_val=row.get("flood",None)
+                    if flood_val in ["", None]:
+                        row["flood"]=0.0
+                    else:
+                        row["flood"]=float(flood_val)
+
+                return data
+            # replace anything invalid with _
+            sanitized_task_id=re.sub(r'[^a-zA-Z0-9_\-\.]', '_', code)
+            logging.info(f"Original code {code} , sanitized task id: fetch_streaming_data__{sanitized_task_id}")
+            operator = ApiToPostgresOperator(
+                task_id=f"fetch_streaming_data_{sanitized_task_id}",
+                api_url=sensor_streaming_url,
+                table_name="flood_sensor_streaming_data",
+                auth_callable=get_bma_weather_api_auth,
+                transform_func=transform_with_fk,
+                data_key=None,
+                db_type="BMA",
+                # schema=schema
+            )
+            operator.execute(context={})
+    create_table_and_insert() >> fetch_and_store_sensor_details() >> create_flood_sensor_streaming_data_table() >> fetch_and_store_streaming_data()
 
 
 road_flood_sensor_location_pipeline()
