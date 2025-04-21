@@ -13,11 +13,11 @@ logging.basicConfig(
 
 
 async def get_mis_budget_by_fy(
-        fiscal_year: str | int,
-        department_id: str | int,
-        exp_object_id: str | int,
-        source_id: str | int,
-        book_id: str | int):
+        fiscal_year: str,
+        department_id: str ,
+        exp_object_id: str ,
+        source_id: str ,
+        book_id: str):
 
     url = os.getenv("BMA_MIS_API_URL")
     username = os.getenv("BMA_MIS_API_USERNAME")

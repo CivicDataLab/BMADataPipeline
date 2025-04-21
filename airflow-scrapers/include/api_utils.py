@@ -325,10 +325,10 @@ def get_bma_api_auth():
     Returns:
         Tuple of (username, password) for basic authentication
     """
-    username = os.getenv('BMA_API_USERNAME')
-    password = os.getenv('BMA_API_PASSWORD')
+    username = os.getenv('BMA_MIS_API_USERNAME')
+    password = os.getenv('BMA_MIS_API_PASSWORD')
 
-    if not username or not password:
+    if not all([username,password]):
         raise ValueError(
             "BMA API credentials not found in environment variables")
 
@@ -394,6 +394,7 @@ def api_to_db_pipeline(api_url: str, table_name: str, headers: Optional[Dict[str
             # Parse JSON response
             try:
                 data = response.json()
+                logger.info(f"The fetched data is {data}")
                 logger.info(
                     f"API response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dictionary'}")
             except Exception as json_err:

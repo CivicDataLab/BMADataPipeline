@@ -29,9 +29,9 @@ logging.basicConfig(
 )
 
 
-WEATHER_API_URL = os.getenv("BMA_WEATHER_API_URL")
-WEATHER_API_URL_FOR_ROAD_SENSOR_LOCATION = f"{WEATHER_API_URL}/flood/info"
-WEATHER_API_URL_FOR_ROAD_FLOOD_SENSOR_24HR_DATA_STREAM = f"{WEATHER_API_URL}/flood/history"
+WEATHER_API_URL_NEW = os.getenv("BMA_WEATHER_API_URL_NEW")
+WEATHER_API_URL_FOR_ROAD_SENSOR_LOCATION_NEW = f"{WEATHER_API_URL_NEW}/flood/items/sensor_profile?meta=*&limit=300"
+# WEATHER_API_URL_FOR_ROAD_FLOOD_SENSOR_24HR_DATA_STREAM = f"{WEATHER_API_URL}/flood/history"
 
 
 @dag(
@@ -63,8 +63,8 @@ def road_flood_sensor_location_pipeline():
             Column('name', String(255)),
             Column('road', String(255)),
             Column('district', String(255)),
-            Column('latitude', String(255)),
-            Column('longitude', String(255)),
+            Column('lat', String(255)),
+            Column('long', String(255)),
             Column('created_at', DateTime(timezone=True),
                    server_default=func.now()),
             Column('updated_at', DateTime(timezone=True),
@@ -82,9 +82,12 @@ def road_flood_sensor_location_pipeline():
     def fetch_and_store_sensor_details():
         operator = ApiToPostgresOperator(
             task_id="fetch_and_store_flood_sensor_details",
-            api_url=WEATHER_API_URL_FOR_ROAD_SENSOR_LOCATION,
+            api_url=WEATHER_API_URL_FOR_ROAD_SENSOR_LOCATION_NEW,
             table_name="flood_sensor",
-            auth_callable=get_bma_weather_api_auth,
+            data_key="data",
+            headers={
+                "KeyId":os.getenv("BMA_WEATHER_API_KEY")
+            },
             db_type="BMA"
         )
         operator.execute(context={})
@@ -125,58 +128,58 @@ def road_flood_sensor_location_pipeline():
         else:
             logging.info("flood_sensor_streaming_table already exists.")
 
-    @task
-    def fetch_and_store_streaming_data():
-        db_host = os.getenv("POSTGRES_HOST")
-        db_user = os.getenv("POSTGRES_USER")
-        db_password = os.getenv("POSTGRES_PASSWORD")
-        db_name = os.getenv("POSTGRES_DB")
+    # @task
+    # def fetch_and_store_streaming_data():
+    #     db_host = os.getenv("POSTGRES_HOST")
+    #     db_user = os.getenv("POSTGRES_USER")
+    #     db_password = os.getenv("POSTGRES_PASSWORD")
+    #     db_name = os.getenv("POSTGRES_DB")
 
-        if not all([db_host, db_user, db_password, db_name]):
-            raise ValueError("Missing one or more database env variables")
+    #     if not all([db_host, db_user, db_password, db_name]):
+    #         raise ValueError("Missing one or more database env variables")
 
-        conn = psycopg2.connect(
-            host=db_host,
-            dbname=db_name,
-            user=db_user,
-            password=db_password
-        )
+    #     conn = psycopg2.connect(
+    #         host=db_host,
+    #         dbname=db_name,
+    #         user=db_user,
+    #         password=db_password
+    #     )
 
-        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute("SELECT code, id FROM flood_sensor;")
-            sensors = cursor.fetchall()
+    #     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+    #         cursor.execute("SELECT code, id FROM flood_sensor;")
+    #         sensors = cursor.fetchall()
 
-        for sensor in sensors:
-            code = sensor["code"]
-            sensor_id=sensor["id"]
-            sensor_streaming_url = f"{WEATHER_API_URL_FOR_ROAD_FLOOD_SENSOR_24HR_DATA_STREAM}?id={code}"
+    #     for sensor in sensors:
+    #         code = sensor["code"]
+    #         sensor_id=sensor["id"]
+    #         sensor_streaming_url = f"{WEATHER_API_URL_FOR_ROAD_FLOOD_SENSOR_24HR_DATA_STREAM}?id={code}"
 
-            def transform_with_fk(data):
-                for row in data:
-                    row["sensor_id"]=sensor_id
+    #         def transform_with_fk(data):
+    #             for row in data:
+    #                 row["sensor_id"]=sensor_id
 
-                    flood_val=row.get("flood",None)
-                    if flood_val in ["", None]:
-                        row["flood"]=0.0
-                    else:
-                        row["flood"]=float(flood_val)
+    #                 flood_val=row.get("flood",None)
+    #                 if flood_val in ["", None]:
+    #                     row["flood"]=0.0
+    #                 else:
+    #                     row["flood"]=float(flood_val)
 
-                return data
-            # replace anything invalid with _
-            sanitized_task_id=re.sub(r'[^a-zA-Z0-9_\-\.]', '_', code)
-            logging.info(f"Original code {code} , sanitized task id: fetch_streaming_data__{sanitized_task_id}")
-            operator = ApiToPostgresOperator(
-                task_id=f"fetch_streaming_data_{sanitized_task_id}",
-                api_url=sensor_streaming_url,
-                table_name="flood_sensor_streaming_data",
-                auth_callable=get_bma_weather_api_auth,
-                transform_func=transform_with_fk,
-                data_key=None,
-                db_type="BMA",
-                # schema=schema
-            )
-            operator.execute(context={})
-    create_table_and_insert() >> fetch_and_store_sensor_details() >> create_flood_sensor_streaming_data_table() >> fetch_and_store_streaming_data()
+    #             return data
+    #         # replace anything invalid with _
+    #         sanitized_task_id=re.sub(r'[^a-zA-Z0-9_\-\.]', '_', code)
+    #         logging.info(f"Original code {code} , sanitized task id: fetch_streaming_data__{sanitized_task_id}")
+    #         operator = ApiToPostgresOperator(
+    #             task_id=f"fetch_streaming_data_{sanitized_task_id}",
+    #             api_url=sensor_streaming_url,
+    #             table_name="flood_sensor_streaming_data",
+    #             auth_callable=get_bma_weather_api_auth,
+    #             transform_func=transform_with_fk,
+    #             data_key=None,
+    #             db_type="BMA",
+    #             # schema=schema
+    #         )
+    #         operator.execute(context={})
+    create_table_and_insert() >> fetch_and_store_sensor_details() >> create_flood_sensor_streaming_data_table() 
 
 
 road_flood_sensor_location_pipeline()
