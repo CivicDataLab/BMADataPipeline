@@ -149,10 +149,10 @@ def insert_data_to_db(table_name: str, data: Dict[str, Any], db_type=None):
 
     try:
         with engine.begin() as conn:
-
-            for row in data:
-                row.setdefault("created_at", datetime.utcnow())
-
+            
+            # for row in data:
+            #     row.setdefault("created_at", datetime.utcnow())
+            logger.info(f"The data to be inserted are {data}")
             conn.execute(table.insert(), data)
             logger.info(f"Inserted {len(data)} rows into {table_name}")
     except Exception as e:
@@ -445,11 +445,3 @@ def api_to_db_pipeline(api_url: str, table_name: str, headers: Optional[Dict[str
         }
 
 
-def main():
-    weather_username_pwd = get_bma_weather_api_auth()
-    print(weather_username_pwd)
-
-
-if __name__ == "__main__":
-
-    main()

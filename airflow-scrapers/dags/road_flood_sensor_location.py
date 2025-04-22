@@ -31,7 +31,6 @@ logging.basicConfig(
 
 WEATHER_API_URL_NEW = os.getenv("BMA_WEATHER_API_URL_NEW")
 WEATHER_API_URL_FOR_ROAD_SENSOR_LOCATION_NEW = f"{WEATHER_API_URL_NEW}/flood/items/sensor_profile?meta=*&limit=300"
-# WEATHER_API_URL_FOR_ROAD_FLOOD_SENSOR_24HR_DATA_STREAM = f"{WEATHER_API_URL}/flood/history"
 
 
 @dag(

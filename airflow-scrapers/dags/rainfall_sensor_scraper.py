@@ -88,7 +88,6 @@ def rainfall_sensor_location_pipeline():
             api_url=WEATHER_API_URL_FOR_RAIN_SENSOR_LOCATION,
             table_name="rainfall_sensor",
             headers=headers,
-            # auth_callable=get_bma_weather_api_auth,
             db_type="BMA"
         )
         operator.execute(context={})
