@@ -12,7 +12,6 @@ from sqlalchemy import (
 
 from sqlalchemy.orm import relationship
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
-from include.api_utils import get_bma_weather_api_auth
 from airflow.decorators import dag, task
 import pendulum
 import logging
@@ -32,7 +31,7 @@ logging.basicConfig(
 WEATHER_APIBMA_RISK_POINT_URL_NEW_URL_NEW = os.getenv("BMA_RISK_POINT_URL_NEW")
 @dag(
     dag_id="riskpoint_location_and_metadata",
-    schedule="0 0 15 * *",
+    schedule="0 0 15 * *", # 15th midnight everymonth
     start_date=pendulum.datetime(2025, 5,22,tz="UTC"),
     catchup=False,
     tags=['api', 'bangkok', 'risk_point']
