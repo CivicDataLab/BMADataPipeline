@@ -152,7 +152,7 @@ def insert_data_to_db(table_name: str, data: Dict[str, Any], db_type=None):
             
             # for row in data:
             #     row.setdefault("created_at", datetime.utcnow())
-            logger.info(f"The data to be inserted are {data}")
+            # logger.info(f"The first data to be inserted are {data[0]}")
             conn.execute(table.insert(), data)
             logger.info(f"Inserted {len(data)} rows into {table_name}")
     except Exception as e:
@@ -394,7 +394,7 @@ def api_to_db_pipeline(api_url: str, table_name: str, headers: Optional[Dict[str
             # Parse JSON response
             try:
                 data = response.json()
-                logger.info(f"The fetched data is {data}")
+                # logger.info(f"The fetched data is {data}")
                 logger.info(
                     f"API response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dictionary'}")
             except Exception as json_err:

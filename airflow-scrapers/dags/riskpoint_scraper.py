@@ -86,10 +86,43 @@ def riskpoint_pipeline():
         headers={
             "KeyId":riskpoint_api_key
         }
+
+        def transform_riskpoint_data(data):
+            transformed_data=[]
+            try:
+
+                logging.info(f"Received {len(data)} items from the API")
+
+                if data:
+                    logging.info(f"First item sample: {json.dumps(data[0],ensure_ascii=False)}")
+                for item in data:
+                    props=item.get("properties", {})
+                    transformed_record={
+                        "objectid":props.get("objectid"),
+                        "risk_name":props.get("risk_name"),
+                        "problems":props.get("problems"),
+                        "district_t":props.get("district_t"),
+                        "group_t":props.get("group_t"),
+                        "status_num":props.get("status_num"),
+                        "status_det":props.get("status_det"),
+                        "long":props.get("long"),
+                        "lat":props.get("lat")
+
+                    }
+                    transformed_data.append(transformed_record)
+
+                if not transformed_data:
+                    raise ValueError("No data was transformed. Check API response and transformation step. ")
+                logging.info(f"Transformed {len(transformed_data)}")
+                return transformed_data
+            except Exception as e:
+                logging.exception(f"error transforming risk point data: {str(e)}")
+                return []
         logging.info("Bulk inserting all risk point data")
         operator=ApiToPostgresOperator(
             task_id="fetch_and_store_riskpoint_metadata",
             api_url=WEATHER_APIBMA_RISK_POINT_URL_NEW_URL_NEW,
+            transform_func=transform_riskpoint_data,
             table_name="risk_points",
             headers=headers,
             db_type="BMA",
