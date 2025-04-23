@@ -1,6 +1,5 @@
 import sys
 import os
-import re
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -35,7 +34,7 @@ WEATHER_APIBMA_RISK_POINT_URL_NEW_URL_NEW = os.getenv("BMA_RISK_POINT_URL_NEW")
 @dag(
     dag_id="riskpoint_location_and_metadata",
     schedule="0 0 15 * *", # 15th midnight everymonth
-    start_date=pendulum.datetime(2025, 5,22,tz="UTC"),
+    start_date=pendulum.datetime(2025, 4,22,tz="UTC"),
     catchup=False,
     tags=['api', 'bangkok', 'risk_point']
 )
