@@ -13,3 +13,6 @@ def convert_current_time_to_bkk_timezone_and_buddhist_year(datetime):
     day=datetime.day
 
     return buddhist_year, month, day
+
+if __name__=="__main__":
+    print(convert_current_time_to_bkk_timezone_and_buddhist_year(pendulum.now()))

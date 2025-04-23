@@ -17,7 +17,7 @@ from airflow.models import Variable
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from include.api_utils import get_bma_api_auth
 from include.superset_utils import create_superset_dataset
-from utils.translation_ner import extract_entities_from_thai_text
+from utils.translation_ner_geocoding import extract_entities_from_thai_text
 
 load_dotenv()
 
