@@ -7,11 +7,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 from sqlalchemy import (
     create_engine, MetaData, Table, Column, inspect,
-    Integer, String, Float,DateTime, func, ForeignKey
+    Integer, String, Float,DateTime, func, ForeignKey,text,update,select
 )
 
-from sqlalchemy.orm import relationship
+
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
+from utils.distance_calculation_utils import (
+    setup_engine_and_metadata, get_sensors, get_distance_between_riskpoint_and_sensors
+)
 from airflow.decorators import dag, task
 import pendulum
 import logging
@@ -50,11 +53,25 @@ def riskpoint_pipeline():
             f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
         )
         metadata = MetaData()
+        rainfall_sensor_table=Table(
+            'rainfall_sensor', metadata,
+            Column("id", Integer, primary_key=True)
+        )
+        road_flood_sensor_table=Table(
+            "flood_sensor",metadata,
+            Column("id", Integer, primary_key=True)
 
+        )
         riskpoint_table = Table(
             'risk_points', metadata,
             Column('id', Integer, primary_key=True),
             Column('objectid', Integer),
+            Column('rainfall_sensor_id', Integer, ForeignKey("rainfall_sensor.id", ondelete="SET NULL", onupdate="CASCADE"),nullable=True),
+            Column('closest_rainfall_sensor_code', String(255)),
+            Column('closest_rainfall_sensor_distance', Float),
+            Column('road_flood_sensor_id', Integer,ForeignKey("flood_sensor.id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True),
+            Column('closest_road_flood_sensor_code', String(255)),
+            Column('closest_road_flood_sensor_distance', Float),
             Column('risk_name', String(255)),
             Column('problems', String(255)),
             Column('district_t', String(255)),
@@ -68,13 +85,25 @@ def riskpoint_pipeline():
             Column('updated_at', DateTime(timezone=True),
                    server_default=func.now(), onupdate=func.now())
         )
+        inspector=inspect(engine)
+        if "risk_points" in inspector.get_table_names():
+            # Check for column mismatches (very basic check on column names and types)
+            #WARNING this is temporary logic for migration. DO NOT USE IN PRODUCTION
+            existing_columns = {col["name"]: col["type"] for col in inspector.get_columns("risk_points")}
+            defined_columns = {col.name: col.type for col in riskpoint_table.columns}
 
-        inspector = inspect(engine)
-        if not inspector.has_table("risk_points"):
+            mismatch = set(existing_columns.keys()) ^ set(defined_columns.keys())  # check for added/removed columns
+            if mismatch:
+                logging.warning("Schema mismatch detected. Dropping and recreating risk_points table.")
+                with engine.begin() as conn:
+                    conn.execute(text("DROP TABLE IF EXISTS risk_points CASCADE"))
+                metadata.create_all(engine)
+                logging.info("Recreated risk_points table with updated schema.")
+            else:
+                logging.info("risk_points table already exists and matches schema.")
+        else:
             metadata.create_all(engine)
             logging.info("Created risk_points table.")
-        else:
-            logging.info("risk_points table already exists.")
     
     @task()
     def fetch_and_store_riskpoint_metadata():
@@ -128,8 +157,40 @@ def riskpoint_pipeline():
             data_key="features"
         )
         operator.execute(context={})
+    @task
+    def enrich_riskpoints_with_rainfall_sensor():
+        engine,metadata=setup_engine_and_metadata()
+        riskpoint_table=metadata.tables.get("risk_points")
 
-    create_table_and_insert() >> fetch_and_store_riskpoint_metadata()
+        with engine.connect() as conn:
+            # fetchALL risk points
+            all_riskpoints=conn.execute(select(riskpoint_table)).mappings().all()
+
+            # load sensor rows
+            sensor_rows=get_sensors(engine, metadata,sensor_table="rainfall_sensor")
+            for riskpoint in all_riskpoints:
+               try:
+                    closest_sensor_id, closest_sensor_code, min_distance = get_distance_between_riskpoint_and_sensors(
+                        riskpoint, "rainfall_sensor", sensor_rows
+                    )
+
+                    # Update riskpoint row with closest rainfall_sensor_id
+                    update_stmt = (
+                        update(riskpoint_table)
+                        .where(riskpoint_table.c.id == riskpoint["id"])
+                        .values(
+                            rainfall_sensor_id=closest_sensor_id,
+                            closest_rainfall_sensor_code=closest_sensor_code,
+                            closest_rainfall_sensor_distance=min_distance
+                            )
+                    )
+                    conn.execute(update_stmt)
+                    logging.info(f"Updated risk_point {riskpoint['id']} with sensor {closest_sensor_id}")
+
+               except Exception as e:
+                    logging.warning(f"Failed to update risk_point {riskpoint.get('objectid')} due to: {e}")
+
+    create_table_and_insert() >> fetch_and_store_riskpoint_metadata() >>enrich_riskpoints_with_rainfall_sensor()
 
 
 riskpoint_pipeline()

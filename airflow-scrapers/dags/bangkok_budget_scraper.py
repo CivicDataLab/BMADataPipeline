@@ -214,7 +214,7 @@ def bangkok_budget_scraper_pipeline():
 
         operator = ApiToPostgresOperator(
             task_id='fetch_bangkok_budget_data',
-            api_url=f"{budget_mis_api_url}?source_id=01&book_id=0&fiscal_year=67&department_id=11000000&exp_object_id=05", #hardcoded for testing
+            api_url=f"{budget_mis_api_url}?source_id=01&book_id=0&fiscal_year=68&department_id=11000000&exp_object_id=05", #hardcoded for testing
             table_name='bangkok_budget',
             transform_func=transform_budget_translation_data,
             auth_callable=get_bma_api_auth,

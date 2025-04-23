@@ -7,11 +7,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from typing import Tuple,List
 from dotenv import load_dotenv
 from geopy.distance import geodesic
-# from utils.budget import get_mis_budget_by_fy
 load_dotenv()
 
-from sqlalchemy import create_engine, select,MetaData,Table
-from sqlalchemy.orm import Session
+from sqlalchemy import create_engine, select,MetaData
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -32,21 +30,15 @@ def setup_engine_and_metadata():
     metadata=MetaData()
     metadata.reflect(bind=engine)
     return engine,metadata
-def get_riskpoint_and_sensors(engine,metadata,risk_point_id:int, sensor_table:str):
-   
-
-    riskpoint_table=metadata.tables.get('risk_points')
+def get_sensors(engine,metadata, sensor_table:str):
     sensor_table=metadata.tables.get(sensor_table)
-    if riskpoint_table is None or sensor_table is None:
+    if sensor_table is None:
         raise ValueError("Risk Points or Rainfall Sensor not found in the database")
     with engine.connect() as conn:
-        # get one risk point by id
-        risk_stmt=select(riskpoint_table).where(riskpoint_table.c.objectid==risk_point_id)
-        riskpoint=conn.execute(risk_stmt).mappings().first()
         # get all sensor rows
-        rainfall_stmt=select(sensor_table)
-        rainfall_sensors=conn.execute(rainfall_stmt).mappings().all()
-        return riskpoint, rainfall_sensors
+        sensor_stmt=select(sensor_table)
+        sensors=conn.execute(sensor_stmt).mappings().all()
+        return  sensors
 
 def get_distance_between_riskpoint_and_sensors(risk_point:dict,sensor_table:str,sensor_rows:list):
     if risk_point is None:
@@ -85,12 +77,3 @@ def get_distance_between_riskpoint_and_sensors(risk_point:dict,sensor_table:str,
     logging.info(f"Closest sensor id is :{closest_sensor_id} for {closest_sensor_code} and {min_distance} for {risk_point.objectid}")
     return closest_sensor_id, closest_sensor_code,min_distance
 
-
-
-def main():
-    engine, metadata=setup_engine_and_metadata()
-    riskpoint, rainfall_sensors=get_riskpoint_and_sensors(engine,metadata,720, 'rainfall_sensor')
-    sensor_id, sensor_code, min_distance=get_distance_between_riskpoint_and_sensors(riskpoint,'rainfall_sensor', rainfall_sensors)
-
-if __name__=="__main__":
-    main()
