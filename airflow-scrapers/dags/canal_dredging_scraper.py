@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
@@ -7,13 +8,13 @@ from sqlalchemy import (
     create_engine, MetaData, Table, Column, inspect,
     Integer, String, Float,DateTime, func, ForeignKey,text,update,select
 )
-from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
-from utils.canals_translation_map_utils import thai_to_column_mapping
 from airflow.decorators import dag, task
 import logging
-from pendulum import datetime
+import pendulum
 from pendulum.tz.timezone import Timezone
-import json
+from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
+from utils.canals_translation_map_utils import thai_to_column_mapping
+from utils.buddhist_year_converter_utils import convert_current_time_to_bkk_timezone_and_buddhist_year
 load_dotenv()
 
 logging.basicConfig(
@@ -27,7 +28,7 @@ BANGKOK_TIMEZONE=Timezone("Asia/Bangkok")
 @dag(
     dag_id="canal_dredging_scraper",
     schedule="0 0 1,16 * *", #runs every 1st and 16th day forever
-    start_date=datetime(2025,4,23, tz="UTC"),
+    start_date=pendulum.datetime(2025,4,23, tz="local"),
     catchup=False,
     tags=['api', 'bangkok', 'canal_dredging_progress_report']
 )
@@ -114,6 +115,10 @@ def canal_dredging_pipeline():
         headers={
             "KeyId":weather_api_key
         }
+
+        current_date=pendulum.now(tz="Asis/Bagkok")
+        query_params={}
+
 
         def transform_canal_dredging_data(data):
             transformed_data=[]
