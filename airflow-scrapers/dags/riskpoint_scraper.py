@@ -187,9 +187,44 @@ def riskpoint_pipeline():
                     logging.info(f"Updated risk_point {riskpoint['id']} with sensor {closest_sensor_id}")
 
                except Exception as e:
-                    logging.warning(f"Failed to update risk_point {riskpoint.get('objectid')} due to: {e}")
+                    logging.warning(f"Failed to update risk_point {riskpoint.get('id')} due to: {e}")
+    @task
+    def enrich_riskpoints_with_flood_sensor():
+        engine,metadata=setup_engine_and_metadata()
+        riskpoint_table=metadata.tables.get("risk_points")
 
-    create_table_and_insert() >> fetch_and_store_riskpoint_metadata() >>enrich_riskpoints_with_rainfall_sensor()
+        with engine.connect() as conn:
+            # fetchALL risk points
+            all_riskpoints=conn.execute(select(riskpoint_table)).mappings().all()
+
+            # load sensor rows
+            sensor_rows=get_sensors(engine, metadata,sensor_table="flood_sensor")
+            for riskpoint in all_riskpoints:
+               logging.info(f"The risk point is {riskpoint}")
+               try:
+                    closest_sensor_id, closest_sensor_code, min_distance = get_distance_between_riskpoint_and_sensors(
+                        riskpoint, "flood_sensor", sensor_rows
+                    )
+                    logging.info(f"closes sensor_id :{closest_sensor_id}, {closest_sensor_code} and {min_distance}")
+
+                    # Update riskpoint row with closest rainfall_sensor_id
+                    update_stmt = (
+                        update(riskpoint_table)
+                        .where(riskpoint_table.c.id == riskpoint["id"])
+                        .values(
+                            road_flood_sensor_id=closest_sensor_id,
+                            closest_road_flood_sensor_code=closest_sensor_code,
+                            closest_road_flood_sensor_distance=min_distance
+                            )
+                    )
+                    conn.execute(update_stmt)
+                    logging.info(f"Updated risk_point {riskpoint['id']} with sensor {closest_sensor_id}")
+
+               except Exception as e:
+                    logging.warning(f"Failed to update risk_point {riskpoint.get('id')} due to: {e}")
+
+
+    create_table_and_insert() >> fetch_and_store_riskpoint_metadata() >>enrich_riskpoints_with_rainfall_sensor() >> enrich_riskpoints_with_flood_sensor()
 
 
 riskpoint_pipeline()

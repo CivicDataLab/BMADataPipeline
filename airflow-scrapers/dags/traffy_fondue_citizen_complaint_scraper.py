@@ -1,6 +1,5 @@
 import sys
 import os
-import json
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
@@ -22,18 +21,18 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-
-BMA_WEATHER_API_URL_NEW=os.getenv("BMA_WEATHER_API_URL_NEW")
+# "https://publicapi.traffy.in.th/teamchadchart-stat-api/geojson/v1?output_format=json&problem_type=น้ำท่วม&start=2025-04-21&end=2025-04-21"
+TRAFFY_FONDUE_CITIZEN_COMPLAINT_URL=os.getenv("TRAFFY_FONDUE_CITIZEN_COMPLAINT_URL")
 BANGKOK_TIMEZONE=Timezone("Asia/Bangkok")
 @dag(
-    dag_id="sewarage_dredging_scraper",
-    schedule="0 0 1,16 * *", #runs every 1st and 16th day of month 
-    start_date=pendulum.datetime(2025,4,23, tz="local"),
+    dag_id="traffy_fondue_citizen_complaint_scraper",
+    schedule="0 1 * * *", #runs every one hour everyday
+    start_date=pendulum.datetime(2025,4,24, tz="local"),
     catchup=False,
-    tags=['api', 'bangkok', 'sewarage_dredging_progress_report']
+    tags=['api', 'bangkok', 'traffy_fondue_complaint_scraper'] 
 )
 
-def sewarage_dredging_pipeline():
+def traffy_fondue_citizen_complaint_pipeline():
     @task()
     def create_table_and_insert():
         db_host = os.getenv("POSTGRES_HOST")
@@ -45,100 +44,51 @@ def sewarage_dredging_pipeline():
         engine = create_engine(
             f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
         )
+
         metadata = MetaData()
-        sewerage_dredging_table = Table(
-        'sewerage_dredging_progress', metadata,
+        traffy_fondue_citizen_complaint= Table(
+        'traffy_fondue_citizen_complaint', metadata,
         Column('id', Integer, primary_key=True),
-        Column('record_number', Integer),
-        Column('district_agency', String(255)),
-        Column('total_alleys', Integer),
-        Column('total_length_m', Integer),
-        Column('alleys_not_cleaned_this_year', Integer),
-        Column('length_not_cleaned_this_year_m', Integer),
-        Column('alleys_cleaned_this_year', Integer),
-        Column('length_cleaned_this_year_m', Integer),
-        Column('planned_alleys_by_district_labor', Integer),
-        Column('planned_length_by_district_labor_m', Integer),
-        Column('executed_alleys_by_district_labor', Integer),
-        Column('executed_length_by_district_labor_m', Integer),
-        Column('percent_executed_by_district_labor', Float),
-        Column('planned_alleys_by_dop', Integer),
-        Column('planned_length_by_dop_m', Integer),
-        Column('annual_budgeted_alleys_by_dop', Integer),
-        Column('annual_budgeted_length_by_dop_m', Integer),
-        Column('executed_length_annual_by_dop_m', Integer),
-        Column('percent_executed_annual_by_dop', Float),
-        Column('supplementary_budgeted_alleys_by_dop', Integer),
-        Column('supplementary_budgeted_length_by_dop_m', Integer),
-        Column('executed_length_supplementary_by_dop_m', Integer),
-        Column('percent_executed_supplementary_by_dop', Float),
-        Column('planned_alleys_by_private', Integer),
-        Column('planned_length_by_private_m', Integer),
-        Column('annual_budgeted_alleys_by_private', Integer),
-        Column('annual_budgeted_length_by_private_m', Integer),
-        Column('executed_length_annual_by_private_m', Integer),
-        Column('percent_executed_annual_by_private', Float),
-        Column('supplementary_budgeted_alleys_by_private', Integer),
-        Column('supplementary_budgeted_length_by_private_m', Integer),
-        Column('executed_length_supplementary_by_private_m', Integer),
-        Column('percent_executed_supplementary_by_private', Float),
-        Column('manhole_cover_repaired', Integer),
-        Column('grating_repaired', Integer),
-        Column('curb_repaired', Integer),
-        Column('remarks', String(255)),
-        Column('district_code', String(50)),
-        Column('buddhist_year', Integer),
-        Column('day_period', String(50)),
-        Column('month', String(50)),
-        Column('record_date', String(50)),
-        Column('reporting_date', String(50)),
-        Column('plan_sequence', String(50)),
-        Column('annual_budget_by_private_baht', Float),
-        Column('supplementary_budget_by_private_baht', Float),
-        Column('executed_alleys_annual_by_private', Integer),
-        Column('executed_alleys_supplementary_by_private', Integer),
-        Column('annual_budget_by_dop_baht', Float),
-        Column('supplementary_budget_by_dop_baht', Float),
-        Column('executed_alleys_annual_by_dop', Integer),
-        Column('executed_alleys_supplementary_by_dop', Integer),
+        Column('problem_type', String(255)),
+        Column('description', String(255)),
+        Column('address', String(255)),
+        Column('district', String(255)),
+        Column('latitude', Float),
+        Column('longitude', Float),
+        Column('state',String),
+        Column('complaint_raised_at', DateTime(timezone=True)),
         Column('created_at', DateTime(timezone=True), server_default=func.now()),
         Column('updated_at', DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
         )
 
         inspector=inspect(engine)
-        if "sewerage_dredging_progress" in inspector.get_table_names():
+        if "traffy_fondue_citizen_complaint" in inspector.get_table_names():
             # Check for column mismatches (very basic check on column names and types)
-            #WARNING this is temporary logic for migration. DO NOT USE IN PRODUCTION
-            existing_columns = {col["name"]: col["type"] for col in inspector.get_columns("sewerage_dredging_progress")}
-            defined_columns = {col.name: col.type for col in sewerage_dredging_progress.columns}
+            # WARNING this is temporary logic for migration. DO NOT USE IN PRODUCTION
+            # WRITE a migration script if time permits. 
+            #  Or use ALTER TABLE statement below.
+            existing_columns = {col["name"]: col["type"] for col in inspector.get_columns("traffy_fondue_citizen_complaint")}
+            defined_columns = {col.name: col.type for col in traffy_fondue_citizen_complaint.columns}
 
             mismatch = set(existing_columns.keys()) ^ set(defined_columns.keys())  # check for added/removed columns
             if mismatch:
-                logging.warning("Schema mismatch detected. Dropping and recreating sewerage_dredging_progress table.")
+                logging.warning("Schema mismatch detected. Dropping and recreating traffy_fondue_citizen_complaint table.")
                 with engine.begin() as conn:
-                    conn.execute(text("DROP TABLE IF EXISTS sewerage_dredging_progress CASCADE"))
+                    conn.execute(text("DROP TABLE IF EXISTS traffy_fondue_citizen_complaint CASCADE"))
                 metadata.create_all(engine)
-                logging.info("Recreated sewerage_dredging_progress table with updated schema.")
+                logging.info("Recreated traffy_fondue_citizen_complaint table with updated schema.")
             else:
-                logging.info("sewerage_dredging_progress table already exists and matches schema.")
+                logging.info("traffy_fondue_citizen_complaint table already exists and matches schema.")
+     
         else:
             metadata.create_all(engine)
-            logging.info("Created sewerage_dredging_progress table.")
+            logging.info("Created traffy_fondue_citizen_complaint table.")
     
     @task()
-    def fetch_and_store_sewarage_dredging_progress():
-        weather_api_key=os.getenv("BMA_WEATHER_API_KEY")
-        if not weather_api_key:
-            raise ValueError("Missing one or more database environment variables.")
-        
-        headers={
-            "KeyId":weather_api_key
-        }
-        current_date=pendulum.now(tz="Asia/Bangkok")
-        buddhist_year,month,date=convert_current_time_to_bkk_timezone_and_buddhist_year(current_date)
-        
-        period='01-15' if date ==1 else '16-30' if date==16 else '16-30'
-        canal_dredging_api_url=f"{BMA_WEATHER_API_URL_NEW}/ProgressReport/DDS?ReportType=01&Period={period}&Month={month}&Year={buddhist_year}"
+    def fetch_and_store_traffy_fondue_citizen_progress():
+
+
+        # canal_dredging_api_url=f"{TRAFFY_FONDUE_CITIZEN_COMPLAINT_URL}&start={}&end={}"
 
         def transform_sewarage_dredging_data(data):
             transformed_data=[]
@@ -150,7 +100,7 @@ def sewarage_dredging_pipeline():
                     logging.info(f"First item sample: {json.dumps(data[0],ensure_ascii=False)}")
                 for item in data:
                    transformed_record={}
-                   for thai_key, eng_col in thai_to_column_mapping.items():
+                   for thai_key, eng_col in thai_to_column_mapping_street_cleaning.items():
                         raw_value=item.get(thai_key, "")
                         # typecasting based on column pattern
                         # for meter based fields
@@ -200,13 +150,13 @@ def sewarage_dredging_pipeline():
         logging.info("Bulk inserting all risk point data")
         operator=ApiToPostgresOperator(
             task_id="fetch_and_store_sewarage_dredging_progress",
-            api_url=canal_dredging_api_url,
+            # api_url=canal_dredging_api_url,
             transform_func=transform_sewarage_dredging_data,
             table_name="sewerage_dredging_progress",
-            headers=headers,
+            # headers=headers,
             db_type="BMA",
             
         )
         operator.execute(context={})
-    create_table_and_insert() >> fetch_and_store_sewarage_dredging_progress() 
-sewarage_dredging_pipeline()
+    create_table_and_insert()
+traffy_fondue_citizen_complaint_pipeline()
