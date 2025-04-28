@@ -40,42 +40,7 @@ WEATHER_API_URL_FOR_ROAD_SENSOR_LOCATION_NEW = f"{WEATHER_API_URL_NEW}/flood/ite
     catchup=False,
     tags=['api', 'bangkok', 'flood_sensor'],
 )
-def road_flood_sensor_location_pipeline():
-
-    @task()
-    def create_table_and_insert():
-        db_host = os.getenv("POSTGRES_HOST")
-        db_user = os.getenv("POSTGRES_USER")
-        db_password = os.getenv("POSTGRES_PASSWORD")
-        db_name = os.getenv("POSTGRES_DB")
-        if not all([db_host, db_user, db_password, db_name]):
-            raise ValueError("Missing one or more environment variables")
-        engine = create_engine(
-            f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
-        )
-        metadata = MetaData()
-
-        flood_sensor_table = Table(
-            'flood_sensor', metadata,
-            Column('id', Integer, primary_key=True),
-            Column('code', String(255)),
-            Column('name', String(255)),
-            Column('road', String(255)),
-            Column('district', String(255)),
-            Column('lat', String(255)),
-            Column('long', String(255)),
-            Column('created_at', DateTime(timezone=True),
-                   server_default=func.now()),
-            Column('updated_at', DateTime(timezone=True),
-                   server_default=func.now(), onupdate=func.now())
-        )
-
-        inspector = inspect(engine)
-        if not inspector.has_table("flood_sensor"):
-            metadata.create_all(engine)
-            logging.info("Created flood_sensor table.")
-        else:
-            logging.info("flood_sensor table already exists.")
+def road_flood_sensor_pipeline():
 
     @task()
     def fetch_and_store_sensor_details():
@@ -90,42 +55,6 @@ def road_flood_sensor_location_pipeline():
             db_type="BMA"
         )
         operator.execute(context={})
-
-    @task()
-    def create_flood_sensor_streaming_data_table():
-        db_host = os.getenv("POSTGRES_HOST")
-        db_user = os.getenv("POSTGRES_USER")
-        db_password = os.getenv("POSTGRES_PASSWORD")
-        db_name = os.getenv("POSTGRES_DB")
-        engine = create_engine(
-            f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
-        )
-        metadata = MetaData()
-
-        # create metadata binding with below streaming data table for proper FK assignment
-        flood_sensor__table=Table(
-            'flood_sensor', metadata,
-            Column('id', Integer,primary_key=True)
-        )
-        flood_sensor_streaming_data_table = Table(
-            'flood_sensor_streaming_data', metadata,
-            Column("id", Integer, primary_key=True),
-            Column("sensor_id", Integer, ForeignKey("flood_sensor.id", ondelete="SET NULL", onupdate="CASCADE"),nullable=True),
-            Column("flood",Float,nullable=True),
-            Column("site_time", DateTime(timezone=True), nullable=True),
-            Column('created_at', DateTime(timezone=True),
-                   server_default=func.now()),
-            Column('updated_at', DateTime(timezone=True),
-                   server_default=func.now(), onupdate=func.now())
-
-        )
-
-        inspector = inspect(engine)
-        if not inspector.has_table("flood_sensor_streaming_data"):
-            metadata.create_all(engine)
-            logging.info("Created flood_sensor_streaming_data table.")
-        else:
-            logging.info("flood_sensor_streaming_table already exists.")
 
     # @task
     # def fetch_and_store_streaming_data():
@@ -178,7 +107,7 @@ def road_flood_sensor_location_pipeline():
     #             # schema=schema
     #         )
     #         operator.execute(context={})
-    create_table_and_insert() >> fetch_and_store_sensor_details() >> create_flood_sensor_streaming_data_table() 
+    fetch_and_store_sensor_details()
 
 
-road_flood_sensor_location_pipeline()
+road_flood_sensor_pipeline()

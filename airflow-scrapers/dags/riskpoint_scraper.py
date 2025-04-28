@@ -39,71 +39,7 @@ WEATHER_APIBMA_RISK_POINT_URL_NEW_URL_NEW = os.getenv("BMA_RISK_POINT_URL_NEW")
     tags=['api', 'bangkok', 'risk_point']
 )
 
-def riskpoint_pipeline():
-    @task()
-    def create_table_and_insert():
-        db_host = os.getenv("POSTGRES_HOST")
-        db_user = os.getenv("POSTGRES_USER")
-        db_password = os.getenv("POSTGRES_PASSWORD")
-        db_name = os.getenv("POSTGRES_DB")
-        if not all([db_host, db_user, db_password, db_name]):
-            raise ValueError("Missing one or more environment variables")
-        engine = create_engine(
-            f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
-        )
-        metadata = MetaData()
-        rainfall_sensor_table=Table(
-            'rainfall_sensor', metadata,
-            Column("id", Integer, primary_key=True)
-        )
-        road_flood_sensor_table=Table(
-            "flood_sensor",metadata,
-            Column("id", Integer, primary_key=True)
-
-        )
-        riskpoint_table = Table(
-            'risk_points', metadata,
-            Column('id', Integer, primary_key=True),
-            Column('objectid', Integer),
-            Column('rainfall_sensor_id', Integer, ForeignKey("rainfall_sensor.id", ondelete="SET NULL", onupdate="CASCADE"),nullable=True),
-            Column('closest_rainfall_sensor_code', String(255)),
-            Column('closest_rainfall_sensor_distance', Float),
-            Column('road_flood_sensor_id', Integer,ForeignKey("flood_sensor.id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True),
-            Column('closest_road_flood_sensor_code', String(255)),
-            Column('closest_road_flood_sensor_distance', Float),
-            Column('risk_name', String(255)),
-            Column('problems', String(255)),
-            Column('district_t', String(255)),
-            Column('group_t', String(255)),
-            Column('status_num', Integer),
-            Column('status_det', String(255)),
-            Column('long', String(255)),
-            Column('lat', String(255)),
-            Column('created_at', DateTime(timezone=True),
-                   server_default=func.now()),
-            Column('updated_at', DateTime(timezone=True),
-                   server_default=func.now(), onupdate=func.now())
-        )
-        inspector=inspect(engine)
-        if "risk_points" in inspector.get_table_names():
-            # Check for column mismatches (very basic check on column names and types)
-            #WARNING this is temporary logic for migration. DO NOT USE IN PRODUCTION
-            existing_columns = {col["name"]: col["type"] for col in inspector.get_columns("risk_points")}
-            defined_columns = {col.name: col.type for col in riskpoint_table.columns}
-
-            mismatch = set(existing_columns.keys()) ^ set(defined_columns.keys())  # check for added/removed columns
-            if mismatch:
-                logging.warning("Schema mismatch detected. Dropping and recreating risk_points table.")
-                with engine.begin() as conn:
-                    conn.execute(text("DROP TABLE IF EXISTS risk_points CASCADE"))
-                metadata.create_all(engine)
-                logging.info("Recreated risk_points table with updated schema.")
-            else:
-                logging.info("risk_points table already exists and matches schema.")
-        else:
-            metadata.create_all(engine)
-            logging.info("Created risk_points table.")
-    
+def riskpoint_pipeline(): 
     @task()
     def fetch_and_store_riskpoint_metadata():
         riskpoint_api_key=os.getenv("BMA_WEATHER_API_KEY")
@@ -224,7 +160,7 @@ def riskpoint_pipeline():
                     logging.warning(f"Failed to update risk_point {riskpoint.get('id')} due to: {e}")
 
 
-    create_table_and_insert() >> fetch_and_store_riskpoint_metadata() >>enrich_riskpoints_with_rainfall_sensor() >> enrich_riskpoints_with_flood_sensor()
+    fetch_and_store_riskpoint_metadata() >>enrich_riskpoints_with_rainfall_sensor() >> enrich_riskpoints_with_flood_sensor()
 
 
 riskpoint_pipeline()

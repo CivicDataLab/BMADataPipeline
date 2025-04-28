@@ -4,17 +4,13 @@ import json
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
-from sqlalchemy import (
-    create_engine, MetaData, Table, Column, inspect,
-    Integer, String, Float,DateTime, func, ForeignKey,text
-)
+
 from airflow.decorators import dag, task
 import logging
 import pendulum
 from pendulum.tz.timezone import Timezone
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.canals_translation_map_utils import thai_to_column_mapping
-from utils.buddhist_year_converter_utils import convert_current_time_to_bkk_timezone_and_buddhist_year
 load_dotenv()
 
 logging.basicConfig(
@@ -34,78 +30,7 @@ BANGKOK_TIMEZONE=Timezone("Asia/Bangkok")
 )
 
 def canal_dredging_pipeline():
-    @task()
-    def create_table_and_insert():
-        db_host = os.getenv("POSTGRES_HOST")
-        db_user = os.getenv("POSTGRES_USER")
-        db_password = os.getenv("POSTGRES_PASSWORD")
-        db_name = os.getenv("POSTGRES_DB")
-        if not all([db_host, db_user, db_password, db_name]):
-            raise ValueError("Missing one or more environment variables")
-        engine = create_engine(
-            f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
-        )
-        metadata = MetaData()
-        canal_dredging_progress = Table(
-        'canal_dredging_progress', metadata,
-        Column('id', Integer, primary_key=True),
-        Column('record_number', Integer),
-        Column('district_agency', String(255)),
-        Column('total_canals_assigned', Integer),
-        Column('total_length_assigned_m', Integer),
-        Column('regularly_maintained_canals', Integer),
-        Column('regularly_maintained_length_m', Integer),
-        Column('periodically_flowed_canals', Integer),
-        Column('periodically_flowed_length_m', Integer),
-        Column('total_maintained_flowed_length_m', Integer),
-        Column('percent_maintained_flowed', Float),
-        Column('planned_dredging_canals', Integer),
-        Column('planned_dredging_length_m', Integer),
-        Column('annual_budgeted_canals', Integer),
-        Column('annual_budgeted_length_m', Integer),
-        Column('annual_budget', Integer),
-        Column('annual_committed_budget', String(255)),
-        Column('dredged_length_annual_budget_m', Integer),
-        Column('percent_dredged_annual_budget', Float),
-        Column('additional_budgeted_canals', Integer),
-        Column('additional_budgeted_length_m', Integer),
-        Column('supplementary_budget', Integer),
-        Column('supplementary_committed_budget', Integer),
-        Column('dredged_length_supplementary_budget_m', Integer),
-        Column('percent_dredged_supplementary_budget', Float),
-        Column('total_dredged_canals', Integer),
-        Column('total_percent_dredged', Float),
-        Column('remarks', String(255)),
-        Column('district_code', String(50)),
-        Column('buddhist_year', Integer),
-        Column('day_period', String(50)),
-        Column('month', String(50)),
-        Column('record_date', String(50)),
-        Column('reporting_date', String(50)),
-        Column('plan_sequence', String(50)),
-        Column('created_at', DateTime(timezone=True), server_default=func.now()),
-        Column('updated_at', DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    )
-        inspector=inspect(engine)
-        if "canal_dredging_progress" in inspector.get_table_names():
-            # Check for column mismatches (very basic check on column names and types)
-            #WARNING this is temporary logic for migration. DO NOT USE IN PRODUCTION
-            existing_columns = {col["name"]: col["type"] for col in inspector.get_columns("canal_dredging_progress")}
-            defined_columns = {col.name: col.type for col in canal_dredging_progress.columns}
 
-            mismatch = set(existing_columns.keys()) ^ set(defined_columns.keys())  # check for added/removed columns
-            if mismatch:
-                logging.warning("Schema mismatch detected. Dropping and recreating canal_dredging_progress table.")
-                with engine.begin() as conn:
-                    conn.execute(text("DROP TABLE IF EXISTS canal_dredging_progress CASCADE"))
-                metadata.create_all(engine)
-                logging.info("Recreated canal_dredging_progress table with updated schema.")
-            else:
-                logging.info("canal_dredging_progress table already exists and matches schema.")
-        else:
-            metadata.create_all(engine)
-            logging.info("Created canal_dredging_progress table.")
-    
     @task()
     def fetch_and_store_canal_dredging_progress():
         weather_api_key=os.getenv("BMA_WEATHER_API_KEY")
@@ -116,7 +41,9 @@ def canal_dredging_pipeline():
             "KeyId":weather_api_key
         }
         current_date=pendulum.now(tz="Asia/Bangkok")
-        buddhist_year,month,date=convert_current_time_to_bkk_timezone_and_buddhist_year(current_date)
+        date=current_date.date
+        month=current_date.month
+        buddhist_year=current_date.year+543
         
         period='01-15' if date ==1 else '16-30' if date==16 else '16-30'
         canal_dredging_api_url=f"{BMA_WEATHER_API_URL_NEW}/ProgressReport/DDS?ReportType=02&Period={period}&Month={month}&Year={buddhist_year}"
@@ -189,5 +116,5 @@ def canal_dredging_pipeline():
             
         )
         operator.execute(context={})
-    create_table_and_insert() >> fetch_and_store_canal_dredging_progress() 
+    fetch_and_store_canal_dredging_progress() 
 canal_dredging_pipeline()

@@ -43,39 +43,6 @@ WEATHER_API_URL_FOR_RAIN_SENSOR_LATEST_DATA_UPTO_24HOUR= f"{WEATHER_API_URL}/rai
 )
 def rainfall_sensor_location_pipeline():
 
-    @task()
-    def create_table():
-        db_host = os.getenv("POSTGRES_HOST")
-        db_user = os.getenv("POSTGRES_USER")
-        db_password = os.getenv("POSTGRES_PASSWORD")
-        db_name = os.getenv("POSTGRES_DB")
-        if not all([db_host, db_user, db_password, db_name]):
-            raise ValueError("Missing one or more environment variables")
-        engine = create_engine(
-            f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
-        )
-        metadata = MetaData()
-
-        rainfall_sensor_table = Table(
-            'rainfall_sensor', metadata,
-            Column('id', Integer, primary_key=True),
-            Column('code', String(255)),
-            Column('name', String(255)),
-            Column('district', String(255)),
-            Column('latitude', String(255)),
-            Column('longitude', String(255)),
-            Column('created_at', DateTime(timezone=True),
-                   server_default=func.now()),
-            Column('updated_at', DateTime(timezone=True),
-                   server_default=func.now(), onupdate=func.now())
-        )
-
-        inspector = inspect(engine)
-        if not inspector.has_table("rainfall_sensor"):
-            metadata.create_all(engine)
-            logging.info("Created rainfall_sensor table.")
-        else:
-            logging.info("rainfall_sensor table already exists.")
 
     @task()
     def fetch_and_store_rainfall_sensor_details():
@@ -92,42 +59,7 @@ def rainfall_sensor_location_pipeline():
         )
         operator.execute(context={})
 
-    @task()
-    def create_rainfall_sensor_streaming_data_table():
-        db_host = os.getenv("POSTGRES_HOST")
-        db_user = os.getenv("POSTGRES_USER")
-        db_password = os.getenv("POSTGRES_PASSWORD")
-        db_name = os.getenv("POSTGRES_DB")
-        engine = create_engine(
-            f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
-        )
-        metadata = MetaData()
-
-        # create metadata binding with below streaming data table for proper FK assignment
-        rainfall_sensor__table=Table(
-            'rainfall_sensor', metadata,
-            Column('id', Integer,primary_key=True)
-        )
-        rainfall_sensor_streaming_data_table = Table(
-            'rainfall_sensor_streaming_data', metadata,
-            Column("id", Integer, primary_key=True),
-            Column("code", String(255)),
-            Column("sensor_id", Integer, ForeignKey("rainfall_sensor.id", ondelete="SET NULL", onupdate="CASCADE"),nullable=True),
-            Column("rf24rh",Float,nullable=True),
-            Column("site_time", DateTime(timezone=True), nullable=True),
-            Column('created_at', DateTime(timezone=True),
-                   server_default=func.now()),
-            Column('updated_at', DateTime(timezone=True),
-                   server_default=func.now(), onupdate=func.now())
-
-        )
-
-        inspector = inspect(engine)
-        if not inspector.has_table("rainfall_sensor_streaming_data"):
-            metadata.create_all(engine)
-            logging.info("Created rainfall_sensor_streaming_data table.")
-        else:
-            logging.info("rainfall_sensor_streaming_data already exists.")
+  
 
     @task
     def fetch_and_store_streaming_data():
@@ -178,6 +110,6 @@ def rainfall_sensor_location_pipeline():
             db_type="BMA",
         )
         operator.execute(context={})
-    create_table() >>fetch_and_store_rainfall_sensor_details() >> create_rainfall_sensor_streaming_data_table() >> fetch_and_store_streaming_data()
+    fetch_and_store_rainfall_sensor_details() >>  fetch_and_store_streaming_data()
 
 rainfall_sensor_location_pipeline()

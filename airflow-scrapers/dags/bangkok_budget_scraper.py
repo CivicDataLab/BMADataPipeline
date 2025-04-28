@@ -6,18 +6,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import json
 import logging
 import pendulum
+
 from dotenv import load_dotenv
-from sqlalchemy import (
-    create_engine, MetaData, Table, Column, inspect,
-    Integer, String, Float, Text, DateTime, JSON
-)
-from sqlalchemy.dialects.postgresql import JSONB
+from urllib.parse import urlencode
 from airflow.decorators import dag, task
 from airflow.models import Variable
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from include.api_utils import get_bma_api_auth
 from include.superset_utils import create_superset_dataset
 from utils.translation_ner_geocoding import extract_entities_from_thai_text
+from dags.bangkok_budget_updater import pad
+
 
 load_dotenv()
 
@@ -28,99 +27,27 @@ logging.basicConfig(
 
 @dag(
     dag_id='bangkok_budget_scraper',
-    schedule='0 0 * * *',  # daily at midnight
-    start_date=pendulum.datetime(2025, 3, 22, tz="UTC"),
+    schedule='0 0 1 * *',  # runs on first of every month forever
+    start_date=pendulum.datetime(2025, 3, 22, tz="Asia/Bangkok"),
     catchup=False,
     tags=['api', 'postgres', 'bangkok', 'budget'],
 )
 def bangkok_budget_scraper_pipeline():
 
     @task()
-    def create_bangkok_budget_table():
-        db_host = os.getenv('BMA_DB_HOST', os.getenv('POSTGRES_HOST', 'localhost'))
-        db_port = os.getenv('BMA_DB_PORT', os.getenv('POSTGRES_PORT', '5432'))
-        db_name = os.getenv('BMA_DB_NAME', os.getenv('POSTGRES_DB', 'airflow'))
-        db_user = os.getenv('BMA_DB_USER', os.getenv('POSTGRES_USER', 'airflow'))
-        db_password = os.getenv('BMA_DB_PASSWORD', os.getenv('POSTGRES_PASSWORD', 'airflow'))
-
-        engine = create_engine(
-            f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
-        )
-        metadata = MetaData()
-
-        budget_table = Table(
-            'bangkok_budget', metadata,
-            Column('id', Integer, primary_key=True),
-            Column('department_name', String(255)),
-            Column('sector_name', String(255)),
-            Column('program_name', String(255)),
-            Column('func_name', String(255)),
-            Column('expenditure_name', String(255)),
-            Column('subobject_name', String(255)),
-            Column('func_id', String(50)),
-            Column('func_year', String(50)),
-            Column('func_seq', String(50)),
-            Column('exp_object_id', String(50)),
-            Column('exp_subobject_id', String(50)),
-            Column('expenditure_id', String(50)),
-            Column('item_id', String(50)),
-            Column('detail', Text),
-            Column('approve_on_hand', String(255)),
-            Column('allot_approve', String(255)),
-            Column('allot_date', String(50)),
-            Column('agr_date', String(50)),
-            Column('open_date', String(50)),
-            Column('acc_date', String(50)),
-            Column('acc_amt', String(255)),
-            Column('sgn_date', String(50)),
-            Column('st_sgn_date', String(50)),
-            Column('end_sgn_date', String(50)),
-            Column('last_rcv_date', String(50)),
-            Column('vendor_type_id', String(50)),
-            Column('vendor_no', String(50)),
-            Column('vendor_description', String(255)),
-            Column('pay_total_amt', String(255)),
-            Column('fin_dept_amt', String(255)),
-            Column('net_amt', Float),
-            Column('pur_hire_status', String(50)),
-            Column('pur_hire_status_name', String(255)),
-            Column('contract_id', String(50)),
-            Column('purchasing_department', String(255)),
-            Column('contract_name', Text),
-            Column('contract_amount', String(255)),
-            Column('pur_hire_method', String(255)),
-            Column('egp_project_code', String(50)),
-            Column('egp_po_control_code', String(50)),
-            Column('original_text', Text),
-            Column('translation', Text),
-            Column('entities', JSONB),
-            Column('geocoding_of', String(255)),
-            Column('lat', Float),
-            Column('lon', Float),
-            Column('created_at', DateTime, default=pendulum.now),
-            Column('updated_at', DateTime, default=pendulum.now, onupdate=pendulum.now),
-            Column('raw_data', JSONB)
-        )
-
-        inspector = inspect(engine)
-        if not inspector.has_table('bangkok_budget'):
-            metadata.create_all(engine)
-            logging.info("Created bangkok_budget table")
-        else:
-            logging.info("bangkok_budget table already exists")
-
-  
-    @task()
     def fetch_and_store_budget_data():
         budget_mis_api_url=os.getenv("BMA_MIS_API_URL")
+     
+        current_date=pendulum.now(tz="local")
+        buddhist_year=current_date.year+543
+        fiscal_year_last_two_chars=buddhist_year%100
         default_api_params = {
             'source_id': '01',
             'book_id': '0',
-            'fiscal_year': '68',
-            'department_id': '11000000',
-            'exp_object_id': '05'
+            'fiscal_year': fiscal_year_last_two_chars,
+            'department_id': '11000000', #For drainage buruue level
+            
         }
-
         try:
             bangkok_params = Variable.get('bangkok_budget_params', deserialize_json=True, default_var=None)
             if bangkok_params:
@@ -131,16 +58,15 @@ def bangkok_budget_scraper_pipeline():
         def transform_budget_translation_data(data):
 
             transformed_data = []
-
+            
             logging.info(f"Received {len(data)} items from the API")
             if data:
                 logging.info(f"First item sample: {json.dumps(data[0], ensure_ascii=False)}")
-
             for item in data:
                 original_text = item.get("DETAIL", item.get("detail", ""))
                 if not original_text:
                     continue
-
+                # NER+Translation
                 result = {}
                 max_retries = 3
                 for attempt in range(max_retries):
@@ -153,8 +79,22 @@ def bangkok_budget_scraper_pipeline():
                         if attempt == max_retries - 1:
                             logging.warning(f"NER translation failed permanently for item: {original_text}")
                             continue
+                # build MISID
+                
+                fy    = fiscal_year_last_two_chars
+                dept  = pad(item.get("DEPARTMENT_ID"),8)
+                func  = pad(item.get("FUNC_ID"),6)
+                year  = pad(item.get("FUNC_YEAR"),2)
+                seq   = pad(item.get("FUNC_SEQ"),2)
+                obj   = pad(item.get("EXP_OBJECT_ID"),2)
+                sub   = pad(item.get("EXP_SUBOBJECT_ID"),2)
+                exp   = pad(item.get("EXPENDITURE_ID"),2)
+                itm   = pad(item.get("ITEM_ID"),3)
 
+                mis_id = fy+dept+func+year+seq+obj+sub+exp+itm
+                logging.info(f"The current mis id is: {mis_id}")
                 transformed_record = {
+                    "mis_id":mis_id,
                     "department_name": item.get("DEPARTMENT_NAME", ""),
                     "sector_name": item.get("SECTOR_NAME", ""),
                     "program_name": item.get("PROGRAM_NAME", ""),
@@ -211,17 +151,27 @@ def bangkok_budget_scraper_pipeline():
 
             logging.info(f"Transformed {len(transformed_data)} records with NER + geocoding")
             return transformed_data
+        for exp_id in ['05','07']:
+            params={**default_api_params, 'exp_object_id':exp_id}
+            qs=urlencode(params)
+            api_url=f"{budget_mis_api_url}?{qs}"
+            logging.info(f"Fetching budget data for ex_object_id={exp_id}=>{api_url}")
 
-        operator = ApiToPostgresOperator(
-            task_id='fetch_bangkok_budget_data',
-            api_url=f"{budget_mis_api_url}?source_id=01&book_id=0&fiscal_year=68&department_id=11000000&exp_object_id=05", #hardcoded for testing
-            table_name='bangkok_budget',
-            transform_func=transform_budget_translation_data,
-            auth_callable=get_bma_api_auth,
-            # params=default_api_params,
-            db_type='BMA'
-        )
-        operator.execute(context={})
+
+            operator = ApiToPostgresOperator(
+                task_id        = f'fetch_bangkok_budget_data_{exp_id}',
+                api_url        = api_url,
+                table_name     = 'bangkok_budget',
+                transform_func = transform_budget_translation_data,
+                auth_callable  = get_bma_api_auth,
+                db_type        = 'BMA'
+            )
+            operator.execute(context={})
+
+    @task
+    def update_and_store_budget_data():
+        """Fetches all data budget data from the budget table and updates columns"""
+        
 
     @task()
     def create_superset_dataset_task():
@@ -236,6 +186,6 @@ def bangkok_budget_scraper_pipeline():
         else:
             logging.warning(f"Failed to create Superset dataset for {table_name}")
 
-    create_bangkok_budget_table() >> fetch_and_store_budget_data() >> create_superset_dataset_task()
+    fetch_and_store_budget_data() >> create_superset_dataset_task()
 
 bangkok_budget_scraper_pipeline()

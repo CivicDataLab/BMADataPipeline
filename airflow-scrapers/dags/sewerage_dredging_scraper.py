@@ -14,7 +14,6 @@ import pendulum
 from pendulum.tz.timezone import Timezone
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.canals_translation_map_utils import thai_to_column_mapping_street_cleaning
-from utils.buddhist_year_converter_utils import convert_current_time_to_bkk_timezone_and_buddhist_year
 load_dotenv()
 
 logging.basicConfig(
@@ -28,103 +27,13 @@ BANGKOK_TIMEZONE=Timezone("Asia/Bangkok")
 @dag(
     dag_id="sewarage_dredging_scraper",
     schedule="0 0 1,16 * *", #runs every 1st and 16th day of month 
-    start_date=pendulum.datetime(2025,4,23, tz="local"),
+    start_date=pendulum.datetime(2025,4,23, tz="Asia/Bangkok"),
     catchup=False,
     tags=['api', 'bangkok', 'sewarage_dredging_progress_report']
 )
 
 def sewarage_dredging_pipeline():
-    @task()
-    def create_table_and_insert():
-        db_host = os.getenv("POSTGRES_HOST")
-        db_user = os.getenv("POSTGRES_USER")
-        db_password = os.getenv("POSTGRES_PASSWORD")
-        db_name = os.getenv("POSTGRES_DB")
-        if not all([db_host, db_user, db_password, db_name]):
-            raise ValueError("Missing one or more environment variables")
-        engine = create_engine(
-            f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
-        )
-        metadata = MetaData()
-        sewerage_dredging_table = Table(
-        'sewerage_dredging_progress', metadata,
-        Column('id', Integer, primary_key=True),
-        Column('record_number', Integer),
-        Column('district_agency', String(255)),
-        Column('total_alleys', Integer),
-        Column('total_length_m', Integer),
-        Column('alleys_not_cleaned_this_year', Integer),
-        Column('length_not_cleaned_this_year_m', Integer),
-        Column('alleys_cleaned_this_year', Integer),
-        Column('length_cleaned_this_year_m', Integer),
-        Column('planned_alleys_by_district_labor', Integer),
-        Column('planned_length_by_district_labor_m', Integer),
-        Column('executed_alleys_by_district_labor', Integer),
-        Column('executed_length_by_district_labor_m', Integer),
-        Column('percent_executed_by_district_labor', Float),
-        Column('planned_alleys_by_dop', Integer),
-        Column('planned_length_by_dop_m', Integer),
-        Column('annual_budgeted_alleys_by_dop', Integer),
-        Column('annual_budgeted_length_by_dop_m', Integer),
-        Column('executed_length_annual_by_dop_m', Integer),
-        Column('percent_executed_annual_by_dop', Float),
-        Column('supplementary_budgeted_alleys_by_dop', Integer),
-        Column('supplementary_budgeted_length_by_dop_m', Integer),
-        Column('executed_length_supplementary_by_dop_m', Integer),
-        Column('percent_executed_supplementary_by_dop', Float),
-        Column('planned_alleys_by_private', Integer),
-        Column('planned_length_by_private_m', Integer),
-        Column('annual_budgeted_alleys_by_private', Integer),
-        Column('annual_budgeted_length_by_private_m', Integer),
-        Column('executed_length_annual_by_private_m', Integer),
-        Column('percent_executed_annual_by_private', Float),
-        Column('supplementary_budgeted_alleys_by_private', Integer),
-        Column('supplementary_budgeted_length_by_private_m', Integer),
-        Column('executed_length_supplementary_by_private_m', Integer),
-        Column('percent_executed_supplementary_by_private', Float),
-        Column('manhole_cover_repaired', Integer),
-        Column('grating_repaired', Integer),
-        Column('curb_repaired', Integer),
-        Column('remarks', String(255)),
-        Column('district_code', String(50)),
-        Column('buddhist_year', Integer),
-        Column('day_period', String(50)),
-        Column('month', String(50)),
-        Column('record_date', String(50)),
-        Column('reporting_date', String(50)),
-        Column('plan_sequence', String(50)),
-        Column('annual_budget_by_private_baht', Float),
-        Column('supplementary_budget_by_private_baht', Float),
-        Column('executed_alleys_annual_by_private', Integer),
-        Column('executed_alleys_supplementary_by_private', Integer),
-        Column('annual_budget_by_dop_baht', Float),
-        Column('supplementary_budget_by_dop_baht', Float),
-        Column('executed_alleys_annual_by_dop', Integer),
-        Column('executed_alleys_supplementary_by_dop', Integer),
-        Column('created_at', DateTime(timezone=True), server_default=func.now()),
-        Column('updated_at', DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-        )
 
-        inspector=inspect(engine)
-        if "sewerage_dredging_progress" in inspector.get_table_names():
-            # Check for column mismatches (very basic check on column names and types)
-            #WARNING this is temporary logic for migration. DO NOT USE IN PRODUCTION
-            existing_columns = {col["name"]: col["type"] for col in inspector.get_columns("sewerage_dredging_progress")}
-            defined_columns = {col.name: col.type for col in sewerage_dredging_progress.columns}
-
-            mismatch = set(existing_columns.keys()) ^ set(defined_columns.keys())  # check for added/removed columns
-            if mismatch:
-                logging.warning("Schema mismatch detected. Dropping and recreating sewerage_dredging_progress table.")
-                with engine.begin() as conn:
-                    conn.execute(text("DROP TABLE IF EXISTS sewerage_dredging_progress CASCADE"))
-                metadata.create_all(engine)
-                logging.info("Recreated sewerage_dredging_progress table with updated schema.")
-            else:
-                logging.info("sewerage_dredging_progress table already exists and matches schema.")
-        else:
-            metadata.create_all(engine)
-            logging.info("Created sewerage_dredging_progress table.")
-    
     @task()
     def fetch_and_store_sewerage_dredging_progress():
         weather_api_key=os.getenv("BMA_WEATHER_API_KEY")
@@ -135,8 +44,7 @@ def sewarage_dredging_pipeline():
             "KeyId":weather_api_key
         }
         current_date=pendulum.now(tz="Asia/Bangkok")
-        buddhist_year,month,date=convert_current_time_to_bkk_timezone_and_buddhist_year(current_date)
-        
+        buddhist_year,month,date=current_date.year, current_date.month, current_date.date
         period='01-15' if date ==1 else '16-30' if date==16 else '16-30'
         canal_dredging_api_url=f"{BMA_WEATHER_API_URL_NEW}/ProgressReport/DDS?ReportType=01&Period={period}&Month={month}&Year={buddhist_year}"
 
@@ -208,5 +116,5 @@ def sewarage_dredging_pipeline():
             
         )
         operator.execute(context={})
-    create_table_and_insert() >> fetch_and_store_sewerage_dredging_progress() 
+    fetch_and_store_sewerage_dredging_progress() 
 sewarage_dredging_pipeline()
