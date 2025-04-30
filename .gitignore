@@ -29,8 +29,6 @@ wheels/
 venv/
 env/
 ENV/
-.venv_39/
-venv_3.9.6/
 
 # IDE files
 .idea/
@@ -57,6 +55,3 @@ reports/
 # Environment variables
 .env
 tempvenv
-airflow.cfg
-
-config/airflow.cfg
