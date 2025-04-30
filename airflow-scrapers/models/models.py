@@ -352,4 +352,16 @@ class FloodSensorStreamingData(Base):
 
 class TraffyFondueCitizenComplaint(Base):
     __tablename__='traffy_fondue_citizen_complaint'
+    id=Column(Integer, primary_key=True)
+    longitude=Column(Float)
+    latitude=Column(Float)
+    description=Column(Text)
+    address=Column(Text)
+    timestamp=Column(DateTime(timezone=True))
+    note=Column(Text)
+    type=Column(String(255))
+    district=Column(String(255))
+    state_type_latest=Column(String(255))
+
+
     
