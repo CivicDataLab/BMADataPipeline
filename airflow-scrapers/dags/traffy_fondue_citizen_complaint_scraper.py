@@ -30,7 +30,7 @@ def traffy_fondue_citizen_complaint_pipeline():
     def fetch_and_store_traffy_fondue_citizen_progress():
         base_url=os.getenv("TRAFFY_FONDUE_CITIZEN_COMPLAINT_URL")
         dt=pendulum.now().to_date_string()
-        api_url=f"{base_url}&start=2024-04-30&end=2025-04-30"
+        api_url=f"{base_url}&start={dt}&end={dt}"
         def transform_func(data):
             transformed_data=[]
             try:
