@@ -349,3 +349,7 @@ class FloodSensorStreamingData(Base):
         server_default=func.now(),
         onupdate=func.now()
     )
+
+class TraffyFondueCitizenComplaint(Base):
+    __tablename__='traffy_fondue_citizen_complaint'
+    
