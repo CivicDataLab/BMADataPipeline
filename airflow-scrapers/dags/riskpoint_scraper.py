@@ -4,12 +4,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
-from sqlalchemy import (
-    create_engine, MetaData, Table, Column, inspect,
-    Integer, String, Float,DateTime, func, ForeignKey,text,update,select
-)
-
-
+from sqlalchemy import update,select
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.distance_calculation_utils import (
     setup_engine_and_metadata, get_sensors, get_distance_between_riskpoint_and_sensors
@@ -18,8 +13,6 @@ from airflow.decorators import dag, task
 import pendulum
 import logging
 import json
-import psycopg2
-from psycopg2.extras import RealDictCursor
 
 load_dotenv()
 
@@ -28,11 +21,8 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
-
-
-WEATHER_APIBMA_RISK_POINT_URL_NEW_URL_NEW = os.getenv("BMA_RISK_POINT_URL_NEW")
 @dag(
-    dag_id="riskpoint_location_and_metadata",
+    dag_id="riskpoint_scraper",
     schedule="0 0 15 * *", # 15th midnight everymonth
     start_date=pendulum.datetime(2025, 4,22,tz="UTC"),
     catchup=False,
@@ -43,6 +33,7 @@ def riskpoint_pipeline():
     @task()
     def fetch_and_store_riskpoint_metadata():
         riskpoint_api_key=os.getenv("BMA_WEATHER_API_KEY")
+        api_url= os.getenv("BMA_RISK_POINT_URL_NEW")
         if not riskpoint_api_key:
             raise ValueError("Missing one or more database environment variables.")
         
@@ -84,7 +75,7 @@ def riskpoint_pipeline():
         logging.info("Bulk inserting all risk point data")
         operator=ApiToPostgresOperator(
             task_id="fetch_and_store_riskpoint_metadata",
-            api_url=WEATHER_APIBMA_RISK_POINT_URL_NEW_URL_NEW,
+            api_url=api_url,
             transform_func=transform_riskpoint_data,
             table_name="risk_points",
             headers=headers,

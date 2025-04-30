@@ -104,6 +104,13 @@ class RainfallSensorStreamingData(Base):
         ),
         nullable=True
     )
+    rf5min=Column(Float, nullable=True)
+    rf15min=Column(Float, nullable=True)
+    rf30min=Column(Float, nullable=True)
+    rf1hr=Column(Float, nullable=True)
+    rf3hr=Column(Float, nullable=True)
+    rf6hr=Column(Float, nullable=True)
+    rf12hr=Column(Float, nullable=True)
     rf24rh     = Column(Float,   nullable=True)
     site_time  = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
@@ -310,6 +317,28 @@ class SewerageDredgingProgress(Base):
     supplementary_budget_by_dop_baht       = Column(Float)
     executed_alleys_annual_by_dop          = Column(Integer)
     executed_alleys_supplementary_by_dop   = Column(Integer)
+    created_at                             = Column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+    updated_at                             = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now()
+    )
+
+
+class FloodSensorStreamingData(Base):
+    __tablename__ = 'flood_sensor_streaming_data'
+
+    id                = Column(Integer, primary_key=True)
+    date_created      = Column(DateTime(timezone=True))
+    sensor_name       = Column(String(255))
+    value             = Column(Float)
+    sensor_profile_id = Column(Integer)
+    district          = Column(String(255))
+    name              = Column(String(255))
+    device_status     = Column(String(50))
     created_at                             = Column(
         DateTime(timezone=True),
         server_default=func.now()

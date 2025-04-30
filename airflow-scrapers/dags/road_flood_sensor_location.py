@@ -35,7 +35,7 @@ WEATHER_API_URL_FOR_ROAD_SENSOR_LOCATION_NEW = f"{WEATHER_API_URL_NEW}/flood/ite
 
 @dag(
     dag_id='road_flood_sensor',
-    schedule='0 * * * *',  # every hour
+    schedule='0 5 * * *',  # every 5 mins
     start_date=pendulum.datetime(2025, 4, 16, tz="UTC"),
     catchup=False,
     tags=['api', 'bangkok', 'flood_sensor'],
@@ -44,9 +44,11 @@ def road_flood_sensor_pipeline():
 
     @task()
     def fetch_and_store_sensor_details():
+        base_url=os.getenv("BMA_WEATHER_API_URL_NEW")
+        api_url=f"{base_url}/flood/items/sensor_profile?meta=*&limit=300"
         operator = ApiToPostgresOperator(
             task_id="fetch_and_store_flood_sensor_details",
-            api_url=WEATHER_API_URL_FOR_ROAD_SENSOR_LOCATION_NEW,
+            api_url=api_url,
             table_name="flood_sensor",
             data_key="data",
             headers={
@@ -56,58 +58,40 @@ def road_flood_sensor_pipeline():
         )
         operator.execute(context={})
 
-    # @task
-    # def fetch_and_store_streaming_data():
-    #     db_host = os.getenv("POSTGRES_HOST")
-    #     db_user = os.getenv("POSTGRES_USER")
-    #     db_password = os.getenv("POSTGRES_PASSWORD")
-    #     db_name = os.getenv("POSTGRES_DB")
+    @task
+    def fetch_and_store_streaming_data():
+        base_url=os.getenv("BMA_WEATHER_API_URL_NEW")
+        api_url=f"{base_url}/flood/fetch-and-save-data/sensor-flood-latest-record?limit=300"
+        api_key=os.getenv("BMA_WEATHER_API_KEY")
+        
+        def transform_func(data):
 
-    #     if not all([db_host, db_user, db_password, db_name]):
-    #         raise ValueError("Missing one or more database env variables")
+            for row in data:
+                device_property=row.get("sensor_profile", {})
+                row["device_status"]=device_property.get("device_status", {})
+            return data
+        
+        operator=ApiToPostgresOperator(
+            task_id="fetch_streaming_data",
+            api_url=api_url,
+            headers={
+                "KeyId":api_key
+            },
+            table_name="flood_sensor_streaming_data",
+            transform_func=transform_func,
+            data_key="data",
+            db_type="BMA",
+        )
+        operator.execute(context={})
 
-    #     conn = psycopg2.connect(
-    #         host=db_host,
-    #         dbname=db_name,
-    #         user=db_user,
-    #         password=db_password
-    #     )
+        
+        
 
-    #     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-    #         cursor.execute("SELECT code, id FROM flood_sensor;")
-    #         sensors = cursor.fetchall()
 
-    #     for sensor in sensors:
-    #         code = sensor["code"]
-    #         sensor_id=sensor["id"]
-    #         sensor_streaming_url = f"{WEATHER_API_URL_FOR_ROAD_FLOOD_SENSOR_24HR_DATA_STREAM}?id={code}"
 
-    #         def transform_with_fk(data):
-    #             for row in data:
-    #                 row["sensor_id"]=sensor_id
 
-    #                 flood_val=row.get("flood",None)
-    #                 if flood_val in ["", None]:
-    #                     row["flood"]=0.0
-    #                 else:
-    #                     row["flood"]=float(flood_val)
 
-    #             return data
-    #         # replace anything invalid with _
-    #         sanitized_task_id=re.sub(r'[^a-zA-Z0-9_\-\.]', '_', code)
-    #         logging.info(f"Original code {code} , sanitized task id: fetch_streaming_data__{sanitized_task_id}")
-    #         operator = ApiToPostgresOperator(
-    #             task_id=f"fetch_streaming_data_{sanitized_task_id}",
-    #             api_url=sensor_streaming_url,
-    #             table_name="flood_sensor_streaming_data",
-    #             auth_callable=get_bma_weather_api_auth,
-    #             transform_func=transform_with_fk,
-    #             data_key=None,
-    #             db_type="BMA",
-    #             # schema=schema
-    #         )
-    #         operator.execute(context={})
-    fetch_and_store_sensor_details()
+    fetch_and_store_sensor_details() >> fetch_and_store_streaming_data()
 
 
 road_flood_sensor_pipeline()

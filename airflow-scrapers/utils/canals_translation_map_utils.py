@@ -37,7 +37,7 @@ thai_to_column_mapping = {
 
 thai_to_column_mapping_street_cleaning = {
     "ลำดับ": "record_number",
-    "หน่วยงาน": "agency",
+    "หน่วยงาน": "district_agency",
     "จำนวนซอยทั้งหมด": "total_alleys",
     "จำนวนเมตรทั้งหมด": "total_length_m",
     "จำนวนซอยที่ไม่ล้างในปีนี้": "alleys_not_cleaned_this_year",

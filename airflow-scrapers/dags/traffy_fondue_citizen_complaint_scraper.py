@@ -13,7 +13,6 @@ import pendulum
 from pendulum.tz.timezone import Timezone
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.canals_translation_map_utils import thai_to_column_mapping
-from utils.buddhist_year_converter_utils import convert_current_time_to_bkk_timezone_and_buddhist_year
 load_dotenv()
 
 logging.basicConfig(
@@ -150,7 +149,7 @@ def traffy_fondue_citizen_complaint_pipeline():
         logging.info("Bulk inserting all risk point data")
         operator=ApiToPostgresOperator(
             task_id="fetch_and_store_sewarage_dredging_progress",
-            # api_url=canal_dredging_api_url,
+            api_url=canal_dredging_api_url,
             transform_func=transform_sewarage_dredging_data,
             table_name="sewerage_dredging_progress",
             # headers=headers,

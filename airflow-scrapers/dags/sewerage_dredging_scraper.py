@@ -4,14 +4,9 @@ import json
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
-from sqlalchemy import (
-    create_engine, MetaData, Table, Column, inspect,
-    Integer, String, Float,DateTime, func, ForeignKey,text
-)
 from airflow.decorators import dag, task
 import logging
 import pendulum
-from pendulum.tz.timezone import Timezone
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.canals_translation_map_utils import thai_to_column_mapping_street_cleaning
 load_dotenv()
@@ -23,7 +18,6 @@ logging.basicConfig(
 
 
 BMA_WEATHER_API_URL_NEW=os.getenv("BMA_WEATHER_API_URL_NEW")
-BANGKOK_TIMEZONE=Timezone("Asia/Bangkok")
 @dag(
     dag_id="sewarage_dredging_scraper",
     schedule="0 0 1,16 * *", #runs every 1st and 16th day of month 
@@ -44,7 +38,7 @@ def sewarage_dredging_pipeline():
             "KeyId":weather_api_key
         }
         current_date=pendulum.now(tz="Asia/Bangkok")
-        buddhist_year,month,date=current_date.year, current_date.month, current_date.date
+        buddhist_year,month,date=current_date.year+543, current_date.month, current_date.date
         period='01-15' if date ==1 else '16-30' if date==16 else '16-30'
         canal_dredging_api_url=f"{BMA_WEATHER_API_URL_NEW}/ProgressReport/DDS?ReportType=01&Period={period}&Month={month}&Year={buddhist_year}"
 
@@ -62,6 +56,7 @@ def sewarage_dredging_pipeline():
                         raw_value=item.get(thai_key, "")
                         # typecasting based on column pattern
                         # for meter based fields
+
                         if eng_col.endswith("_m"):
                             try:
                                 transformed_record[eng_col]=int(raw_value.replace(",","")) if raw_value not in [None, "-", ""] else 0
@@ -87,13 +82,6 @@ def sewarage_dredging_pipeline():
                                 transformed_record[eng_col]=str(raw_value) if raw_value else current_date
                             except Exception:
                                 transformed_record[eng_col]=current_date
-
-                        # elif eng_col in ["record_number", "total_dredged_canals", "planned_dredging_canals", "additional_budgeted_canals", "annual_budgeted_canals", "regularly_maintained_canals", "periodically_flowed_canals", "total_canals_assigned"]:
-                        #     try:
-                        #         transformed_record[eng_col] = int(raw_value) if raw_value not in [None, "-", ""] else 0
-                        #     except Exception:
-                        #         transformed_record[eng_col] = 0
-                        
                         else:
                             transformed_record[eng_col]=raw_value if raw_value not in ["-",""] else None
                         

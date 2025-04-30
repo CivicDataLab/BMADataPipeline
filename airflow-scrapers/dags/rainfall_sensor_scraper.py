@@ -5,18 +5,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
-from sqlalchemy import (
-    create_engine, MetaData, Table, Column, inspect,
-    Integer, String, Float,DateTime, func, ForeignKey
-)
-
-from sqlalchemy.orm import relationship
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from include.api_utils import get_bma_weather_api_auth
 from airflow.decorators import dag, task
 import pendulum
 import logging
-import json
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -29,13 +22,10 @@ logging.basicConfig(
 )
 
 
-WEATHER_API_URL = os.getenv("BMA_WEATHER_API_URL_NEW")
-WEATHER_API_URL_FOR_RAIN_SENSOR_LOCATION = f"{WEATHER_API_URL}/rain/info"
-WEATHER_API_URL_FOR_RAIN_SENSOR_LATEST_DATA_UPTO_24HOUR= f"{WEATHER_API_URL}/rain/lastdata"
 
 
 @dag(
-    dag_id='rainfall_flood_sensor',
+    dag_id='rainfall_sensor',
     schedule='0 * * * *',  # every hour
     start_date=pendulum.datetime(2025, 4, 16, tz="UTC"),
     catchup=False,
@@ -47,12 +37,14 @@ def rainfall_sensor_location_pipeline():
     @task()
     def fetch_and_store_rainfall_sensor_details():
         weather_api_key=os.getenv("BMA_WEATHER_API_KEY")
+        base_url=os.getenv("BMA_WEATHER_API_URL_NEW")
+        api_url=f"{base_url}/rain/info"
         headers={
             "KeyId":weather_api_key
         }
         operator = ApiToPostgresOperator(
             task_id="fetch_and_store_rainfall_sensor_details",
-            api_url=WEATHER_API_URL_FOR_RAIN_SENSOR_LOCATION,
+            api_url=api_url,
             table_name="rainfall_sensor",
             headers=headers,
             db_type="BMA"
@@ -68,7 +60,8 @@ def rainfall_sensor_location_pipeline():
         db_password = os.getenv("POSTGRES_PASSWORD")
         db_name = os.getenv("POSTGRES_DB")
         weather_api_key=os.getenv("BMA_WEATHER_API_KEY")
-        sensor_streaming_url = WEATHER_API_URL_FOR_RAIN_SENSOR_LATEST_DATA_UPTO_24HOUR
+        base_url=os.getenv("BMA_WEATHER_API_URL_NEW")
+        api_url=f"{base_url}/rain/lastdata"
         headers={
             "KeyId":weather_api_key
         }
@@ -87,7 +80,7 @@ def rainfall_sensor_location_pipeline():
             sensors = cursor.fetchall()
         for sensor in sensors:
             code=sensor["code"]
-            sensor_id=sensor["id"]
+            sensor_id=sensor.get("id")
             
 
             def transform_with_fk(data):
@@ -102,7 +95,7 @@ def rainfall_sensor_location_pipeline():
                 return data
         operator = ApiToPostgresOperator(
             task_id="fetch_streaming_data",
-            api_url=sensor_streaming_url,
+            api_url=api_url,
             headers=headers,
             table_name="rainfall_sensor_streaming_data",
             transform_func=transform_with_fk,
