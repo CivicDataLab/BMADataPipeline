@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 from sqlalchemy import (
     create_engine, MetaData, Table, Column, inspect,
-    Integer, String, Float,DateTime, func, ForeignKey,text
+    Integer, String, Float,DateTime, func,text
 )
 from airflow.decorators import dag, task
 import logging

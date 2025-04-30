@@ -57,3 +57,6 @@ reports/
 # Environment variables
 .env
 tempvenv
+airflow.cfg
+
+config/airflow.cfg

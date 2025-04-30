@@ -335,6 +335,7 @@ class FloodSensorStreamingData(Base):
     date_created      = Column(DateTime(timezone=True))
     sensor_name       = Column(String(255))
     value             = Column(Float)
+    record_time=Column(DateTime(timezone=True))
     sensor_profile_id = Column(Integer)
     district          = Column(String(255))
     name              = Column(String(255))

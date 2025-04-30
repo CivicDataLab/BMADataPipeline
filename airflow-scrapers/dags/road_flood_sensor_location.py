@@ -16,10 +16,6 @@ from include.api_utils import get_bma_weather_api_auth
 from airflow.decorators import dag, task
 import pendulum
 import logging
-import json
-import psycopg2
-from psycopg2.extras import RealDictCursor
-
 load_dotenv()
 
 
@@ -36,7 +32,7 @@ WEATHER_API_URL_FOR_ROAD_SENSOR_LOCATION_NEW = f"{WEATHER_API_URL_NEW}/flood/ite
 @dag(
     dag_id='road_flood_sensor',
     schedule='0 5 * * *',  # every 5 mins
-    start_date=pendulum.datetime(2025, 4, 16, tz="UTC"),
+    start_date=pendulum.datetime(2025, 4, 16, tz="Asia/Bangkok"),
     catchup=False,
     tags=['api', 'bangkok', 'flood_sensor'],
 )
@@ -68,7 +64,14 @@ def road_flood_sensor_pipeline():
 
             for row in data:
                 device_property=row.get("sensor_profile", {})
+                timestamp_ms=row.get("timestamp", pendulum.now(tz='Asia/Bangkok'))
+                dt_bkk=pendulum.from_timestamp(timestamp_ms/1000, tz="Asia/Bangkok")
+                iso_str=dt_bkk.to_iso8601_string()
+
+                
+                logging.info(f"The ISO string for timestamp is : {iso_str}")
                 row["device_status"]=device_property.get("device_status", {})
+                row["record_time"]=iso_str
             return data
         
         operator=ApiToPostgresOperator(
@@ -83,13 +86,6 @@ def road_flood_sensor_pipeline():
             db_type="BMA",
         )
         operator.execute(context={})
-
-        
-        
-
-
-
-
 
     fetch_and_store_sensor_details() >> fetch_and_store_streaming_data()
 
