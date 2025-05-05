@@ -356,6 +356,7 @@ class TraffyFondueCitizenComplaint(Base):
     longitude=Column(Float)
     latitude=Column(Float)
     description=Column(Text)
+    riskpoint_objectid=Column(Integer)
     address=Column(Text)
     timestamp=Column(DateTime(timezone=True))
     note=Column(Text)

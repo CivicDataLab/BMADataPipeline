@@ -30,13 +30,13 @@ def setup_engine_and_metadata():
     metadata=MetaData()
     metadata.reflect(bind=engine)
     return engine,metadata
-def get_sensors(engine,metadata, sensor_table:str):
+def get_sensors(engine,metadata, sensor_table:str, district=None):
     sensor_table=metadata.tables.get(sensor_table)
     if sensor_table is None:
         raise ValueError("Risk Points or Rainfall Sensor not found in the database")
     with engine.connect() as conn:
         # get all sensor rows
-        sensor_stmt=select(sensor_table)
+        sensor_stmt=select(sensor_table).where(sensor_table.c.district==district)
         sensors=conn.execute(sensor_stmt).mappings().all()
         return  sensors
 

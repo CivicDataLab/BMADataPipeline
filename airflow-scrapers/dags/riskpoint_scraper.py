@@ -9,6 +9,7 @@ from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.distance_calculation_utils import (
     setup_engine_and_metadata, get_sensors, get_distance_between_riskpoint_and_sensors
 )
+from utils.bangkok_districts import bangkok_districts
 from airflow.decorators import dag, task
 import pendulum
 import logging
@@ -86,35 +87,41 @@ def riskpoint_pipeline():
     @task
     def enrich_riskpoints_with_rainfall_sensor():
         engine,metadata=setup_engine_and_metadata()
-        riskpoint_table=metadata.tables.get("risk_points")
-
+        rp_table=metadata.tables.get("risk_points")
+        rf_sensor_table=metadata.tables.get("rainfall_sensor")
         with engine.connect() as conn:
             # fetchALL risk points
-            all_riskpoints=conn.execute(select(riskpoint_table)).mappings().all()
-
-            # load sensor rows
-            sensor_rows=get_sensors(engine, metadata,sensor_table="rainfall_sensor")
-            for riskpoint in all_riskpoints:
-               try:
-                    closest_sensor_id, closest_sensor_code, min_distance = get_distance_between_riskpoint_and_sensors(
-                        riskpoint, "rainfall_sensor", sensor_rows
-                    )
-
-                    # Update riskpoint row with closest rainfall_sensor_id
-                    update_stmt = (
-                        update(riskpoint_table)
-                        .where(riskpoint_table.c.id == riskpoint["id"])
-                        .values(
-                            rainfall_sensor_id=closest_sensor_id,
-                            closest_rainfall_sensor_code=closest_sensor_code,
-                            closest_rainfall_sensor_distance=min_distance
+    
+            for district in bangkok_districts:
+                # load sensor rows filtered by a district
+                sensor_stmt=select(rf_sensor_table).where(rf_sensor_table.c.district==district)
+                district_sensors=conn.execute(sensor_stmt).mappings().all()
+                # load risk points rows filtered by a district
+                risk_stmt=select(rp_table).where(rp_table.c.district_t==district)
+                district_risk_points=conn.execute(risk_stmt).mappings().all()
+                logging.info(f"District Risk Points are: {district_risk_points}")
+                for riskpoint in district_risk_points:
+                    try:    
+                            
+                            closest_sensor_id, closest_sensor_code, min_distance = get_distance_between_riskpoint_and_sensors(
+                                riskpoint, "rainfall_sensor", district_sensors
                             )
-                    )
-                    conn.execute(update_stmt)
-                    logging.info(f"Updated risk_point {riskpoint['id']} with sensor {closest_sensor_id}")
 
-               except Exception as e:
-                    logging.warning(f"Failed to update risk_point {riskpoint.get('id')} due to: {e}")
+                            # Update riskpoint row with closest rainfall_sensor_id
+                            update_stmt = (
+                                update(rp_table)
+                                .where(rp_table.c.id == riskpoint["id"])
+                                .values(
+                                    rainfall_sensor_id=closest_sensor_id,
+                                    closest_rainfall_sensor_code=closest_sensor_code,
+                                    closest_rainfall_sensor_distance=min_distance
+                                    )
+                            )
+                            conn.execute(update_stmt)
+                            logging.info(f"Updated risk_point {riskpoint['id']} with sensor {closest_sensor_id}")
+
+                    except Exception as e:
+                            logging.warning(f"Failed to update risk_point {riskpoint.get('id')} due to: {e}")
     @task
     def enrich_riskpoints_with_flood_sensor():
         engine,metadata=setup_engine_and_metadata()
