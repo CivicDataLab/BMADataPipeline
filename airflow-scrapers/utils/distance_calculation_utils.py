@@ -1,6 +1,5 @@
 import os
 import logging
-import json
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -9,27 +8,12 @@ from dotenv import load_dotenv
 from geopy.distance import geodesic
 load_dotenv()
 
-from sqlalchemy import create_engine, select,MetaData
+from sqlalchemy import select
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
-
-def setup_engine_and_metadata():
-    db_host = os.getenv("POSTGRES_HOST")
-    db_user = os.getenv("POSTGRES_USER")
-    db_password = os.getenv("POSTGRES_PASSWORD")
-    db_name = os.getenv("POSTGRES_DB")
-    if not all([db_host, db_user, db_password, db_name]):
-        raise ValueError("Missing one or more environment variables")
-    
-    engine=create_engine(
-         f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
-    )
-    metadata=MetaData()
-    metadata.reflect(bind=engine)
-    return engine,metadata
 def get_sensors(engine,metadata, sensor_table:str, district=None):
     sensor_table=metadata.tables.get(sensor_table)
     if sensor_table is None:

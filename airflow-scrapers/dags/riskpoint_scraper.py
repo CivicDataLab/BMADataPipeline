@@ -2,13 +2,13 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from dotenv import load_dotenv
 from sqlalchemy import update,select
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.distance_calculation_utils import (
-    setup_engine_and_metadata, get_sensors, get_distance_between_riskpoint_and_sensors
+     get_sensors, get_distance_between_riskpoint_and_sensors
 )
+from utils.db_utils import setup_engine_and_metadata
 from utils.bangkok_districts import bangkok_districts
 from airflow.decorators import dag, task
 import pendulum

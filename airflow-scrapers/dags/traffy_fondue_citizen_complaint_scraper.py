@@ -11,6 +11,7 @@ import pendulum
 from geopy.distance import geodesic
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.db_utils import setup_engine_and_metadata
+from utils.bangkok_districts import bangkok_districts
 load_dotenv()
 
 logging.basicConfig(
@@ -80,36 +81,36 @@ def traffy_fondue_citizen_complaint_pipeline():
         rp_table = metadata.tables["risk_points"]
 
         with engine.begin() as conn:
-            # fetch all complaints and risk points
-            complaints = conn.execute(select(tf_table)).mappings().all()
-            risk_points = conn.execute(select(rp_table)).mappings().all()
 
-            for comp in complaints:
-                comp_coord = (comp["latitude"], comp["longitude"])
-                logging.info(f"The comp-coords are: {comp_coord}")
-                matched_objectid = None
+            for district in bangkok_districts:
+                district_complaints=conn.execute(select(tf_table).where(tf_table.c.district==district)).mappings().all()
+                district_risk_points=conn.execute(select(rp_table).where(rp_table.c.district_t==district)).mappings().all()
+                for comp in district_complaints:
+                    comp_coord = (comp["latitude"], comp["longitude"])
+                    logging.info(f"The comp-coords are: {comp_coord}")
+                    matched_objectid = None
 
-                # find first risk point within 200m
-                for rp in risk_points:
-                    try:
-                        rp_coord = (float(rp["lat"]), float(rp["long"]))
-                        logging.info(f"The rp-coords are : {rp_coord}")
-                    except (TypeError, ValueError):
-                        # skip if lat/long not parseable
-                        continue
+                    # find first risk point within 500m
+                    for rp in district_risk_points:
+                        try:
+                            rp_coord = (float(rp["lat"]), float(rp["long"]))
+                            logging.info(f"The rp-coords are : {rp_coord}")
+                        except (TypeError, ValueError):
+                            # skip if lat/long not parseable
+                            continue
 
-                    if geodesic(comp_coord, rp_coord).meters <= 500:
-                        matched_objectid = rp["objectid"]
+                        if geodesic(comp_coord, rp_coord).meters <= 500:
+                            matched_objectid = rp["objectid"]
 
-                        break
+                            break
 
-                # apply update (will set to None if no match)
-                stmt = (
-                    update(tf_table)
-                    .where(tf_table.c.id == comp["id"])
-                    .values(riskpoint_objectid=matched_objectid)
-                )
-                conn.execute(stmt)
+                    # apply update (will set to None if no match)
+                    stmt = (
+                        update(tf_table)
+                        .where(tf_table.c.id == comp["id"])
+                        .values(riskpoint_objectid=matched_objectid)
+                    )
+                    conn.execute(stmt)
 
             
             
