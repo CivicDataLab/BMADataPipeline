@@ -364,5 +364,20 @@ class TraffyFondueCitizenComplaint(Base):
     district=Column(String(255))
     state_type_latest=Column(String(255))
 
-
+# risk_id,risk_name,category,district,flood_sensor_code,flood_code,hour,max_flood,flood_duration_minutes,rain_code,rf1hr
+class RainfallAndFloodSummary(Base):
+    __tablename__='rainfall_and_flood_summary'
+    id=Column(Integer, primary_key=True)
+    risk_id=Column(Integer)
+    risk_name=Column(String(255))
+    category=Column(String(255))
+    district=Column(String(255))
+    flood_sensor_code=Column(String(255))
+    flood_code=Column(String(255))
+    hour=Column(DateTime(timezone=True))
+    max_flood=Column(Float)
+    flood_duration_minutes=Column(Float)
+    rainfall_sensor_code=Column(String(255))
+    rf1hr=Column(Float)
+    
     

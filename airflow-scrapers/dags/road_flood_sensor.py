@@ -3,16 +3,8 @@ import os
 import re
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from dotenv import load_dotenv
-from sqlalchemy import (
-    create_engine, MetaData, Table, Column, inspect,
-    Integer, String, Float,DateTime, func, ForeignKey
-)
-
-from sqlalchemy.orm import relationship
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
-from include.api_utils import get_bma_weather_api_auth
 from airflow.decorators import dag, task
 import pendulum
 import logging
@@ -63,14 +55,24 @@ def road_flood_sensor_pipeline():
         def transform_func(data):
 
             for row in data:
-                device_property=row.get("sensor_profile", {})
-                timestamp_ms=row.get("timestamp", pendulum.now(tz='Asia/Bangkok'))
-                dt_bkk=pendulum.from_timestamp(timestamp_ms/1000, tz="Asia/Bangkok")
-                iso_str=dt_bkk.to_iso8601_string()
+                logging.info(f"Original row: {row}")
 
+                device_property=row.get("sensor_profile", {})
+
+                raw_ts=row.get("timestamp")
+
+                try:
+                    timestamp_ms=int(raw_ts)
+                except(TypeError, ValueError):
+                    logging.warning(f"Could not parse timestamp {raw_ts!r}, defaulting to now")
+                    timestamp_ms=int(pendulum.now(tz="Asia/Bangkok").float_timestamp*1000)
+
+                # convert to bangkok timezone
+                dt_bkk=pendulum.from_timestamp(timestamp_ms/1000, tz='Asia/Bangkok')
+                iso_str=dt_bkk.to_iso8601_string()
                 
-                logging.info(f"The ISO string for timestamp is : {iso_str}")
-                row["device_status"]=device_property.get("device_status", {})
+                logging.info(f"Parsed ISO timestamp: {iso_str}")
+                row["device_status"]=device_property.get("device_status", "")
                 row["record_time"]=iso_str
             return data
         
