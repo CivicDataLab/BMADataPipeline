@@ -4,8 +4,7 @@ import logging
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
-# from utils.db_utils import setup_engine_and_metadata
-from models.models import RainfallAndFloodSummary  # adjust import as needed
+from models.models import RainfallAndFloodSummary 
 
 from dotenv import load_dotenv
 load_dotenv()

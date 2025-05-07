@@ -6,7 +6,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
-from include.api_utils import get_bma_weather_api_auth
 from airflow.decorators import dag, task
 import pendulum
 import logging
@@ -55,23 +54,26 @@ def rainfall_sensor_location_pipeline():
 
     @task
     def fetch_and_store_streaming_data():
-        db_host = os.getenv("POSTGRES_HOST")
-        db_user = os.getenv("POSTGRES_USER")
-        db_password = os.getenv("POSTGRES_PASSWORD")
-        db_name = os.getenv("POSTGRES_DB")
+        db_host = os.getenv("BMA_DB_HOST")
+        db_user = os.getenv("BMA_DB_USER")
+        db_password = os.getenv("BMA_DB_PASSWORD")
+        db_name = os.getenv("BMA_DB_NAME")
+        db_port=os.getenv("BMA_DB_PORT")
+
         weather_api_key=os.getenv("BMA_WEATHER_API_KEY")
         base_url=os.getenv("BMA_WEATHER_API_URL_NEW")
         api_url=f"{base_url}/rain/lastdata"
         headers={
             "KeyId":weather_api_key
         }
-        if not all([db_host, db_user, db_password, db_name]):
+        if not all([db_host, db_user, db_password, db_name, db_port]):
             raise ValueError("Missing one or more database env variables")
 
         conn = psycopg2.connect(
             host=db_host,
             dbname=db_name,
             user=db_user,
+            port=db_port,
             password=db_password
         )
 
