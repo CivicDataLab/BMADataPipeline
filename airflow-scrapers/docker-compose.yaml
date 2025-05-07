@@ -21,7 +21,7 @@ services:
     user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-50000}"
     depends_on:
       - postgres
-    entrypoint: ["/bin/bash", "-c", "airflow db migrate && airflow users create --username \"${AIRFLOW_ADMIN_USERNAME:-admin}\" --firstname \"${AIRFLOW_ADMIN_FIRSTNAME:-Admin}\" --lastname \"${AIRFLOW_ADMIN_LASTNAME:-User}\" --role Admin --email \"${AIRFLOW_ADMIN_EMAIL:-admin@example.com}\" --password \"${AIRFLOW_ADMIN_PASSWORD:-admin}\" && airflow webserver"]
+    entrypoint: ["/bin/bash", "-c", "airflow db init && airflow db upgrade && airflow users create --username \"${AIRFLOW_ADMIN_USERNAME:-admin}\" --firstname \"${AIRFLOW_ADMIN_FIRSTNAME:-Admin}\" --lastname \"${AIRFLOW_ADMIN_LASTNAME:-User}\" --role Admin --email \"${AIRFLOW_ADMIN_EMAIL:-admin@example.com}\" --password \"${AIRFLOW_ADMIN_PASSWORD:-admin}\" && airflow webserver"]
     environment:
       - AIRFLOW_HOME=${AIRFLOW_HOME:-/opt/airflow}
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
@@ -58,6 +58,8 @@ services:
       - ./include:${AIRFLOW_HOME:-/opt/airflow}/include
       - ./config:${AIRFLOW_HOME:-/opt/airflow}/config
       - ./config/airflow.cfg:${AIRFLOW_HOME:-/opt/airflow}/airflow.cfg
+      - ./utils:${AIRFLOW_HOME:-/opt/airflow}/utils
+      - ./models:${AIRFLOW_HOME:-/opt/airflow}/models
     ports:
       - "8080:8080"
     command: webserver
@@ -108,6 +110,8 @@ services:
       - ./include:${AIRFLOW_HOME:-/opt/airflow}/include
       - ./config:${AIRFLOW_HOME:-/opt/airflow}/config
       - ./config/airflow.cfg:${AIRFLOW_HOME:-/opt/airflow}/airflow.cfg
+      - ./utils:${AIRFLOW_HOME:-/opt/airflow}/utils
+      - ./models:${AIRFLOW_HOME:-/opt/airflow}/models
     command: scheduler
 
 volumes:
