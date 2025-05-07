@@ -14,10 +14,11 @@ logging.basicConfig(
 )
 # extracting setting up engine and metadata using SQLAlchemy Core pattern.
 def setup_engine_and_metadata():
-    db_host = os.getenv("POSTGRES_HOST")
-    db_user = os.getenv("POSTGRES_USER")
-    db_password = os.getenv("POSTGRES_PASSWORD")
-    db_name = os.getenv("POSTGRES_DB")
+    db_host = os.getenv("BMA_DB_HOST")
+    db_user = os.getenv("BMA_DB_USER")
+    db_password = os.getenv("BMA_DB_PASSWORD")
+    db_name = os.getenv("BMA_DB_NAME")
+    db_port=os.getenv("BMA_DB_PORT")
     if not all([db_host, db_user, db_password, db_name]):
         raise ValueError("Missing one or more environment variables")
     engine=None
@@ -25,7 +26,7 @@ def setup_engine_and_metadata():
     try:
 
         engine=create_engine(
-            f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}?sslmode=require'
+            f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
         )
         metadata=MetaData()
         metadata.reflect(bind=engine)
