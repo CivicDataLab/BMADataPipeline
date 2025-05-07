@@ -32,6 +32,6 @@ else:
         prefix='sqlalchemy.', poolclass=pool.NullPool
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(connection=connection, target_metadata=target_metadata,compare_type=True)
         with context.begin_transaction():
             context.run_migrations()

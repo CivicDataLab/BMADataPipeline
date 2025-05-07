@@ -57,6 +57,6 @@ reports/
 # Environment variables
 .env
 tempvenv
-airflow.cfg
+airflow-scrapers/airflow.cfg
 
-config/airflow.cfg
+airflow-scrapers/config/airflow.cfg
