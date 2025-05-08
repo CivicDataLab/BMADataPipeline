@@ -1,5 +1,6 @@
 import sys
 import os
+import pandas as pd
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
@@ -8,13 +9,13 @@ from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.distance_calculation_utils import (
      get_sensors, get_distance_between_riskpoint_and_sensors
 )
+import numpy as np
 from utils.db_utils import setup_engine_and_metadata
 from utils.bangkok_districts import bangkok_districts
 from airflow.decorators import dag, task
 import pendulum
 import logging
 import json
-
 load_dotenv()
 
 
@@ -25,7 +26,7 @@ logging.basicConfig(
 @dag(
     dag_id="riskpoint_scraper",
     schedule="0 0 15 * *", # 15th midnight everymonth
-    start_date=pendulum.datetime(2025, 4,22,tz="UTC"),
+    start_date=pendulum.datetime(2025, 4,22,tz="Asia/Bangkok"),
     catchup=False,
     tags=['api', 'bangkok', 'risk_point']
 )
@@ -35,8 +36,8 @@ def riskpoint_pipeline():
     def fetch_and_store_riskpoint_metadata():
         riskpoint_api_key=os.getenv("BMA_WEATHER_API_KEY")
         api_url= os.getenv("BMA_RISK_POINT_URL_NEW")
-        if not riskpoint_api_key:
-            raise ValueError("Missing one or more database environment variables.")
+        if not all ([riskpoint_api_key, api_url]):
+            raise ValueError("Missing one or more  environment variables.")
         
         headers={
             "KeyId":riskpoint_api_key
@@ -124,40 +125,45 @@ def riskpoint_pipeline():
                             logging.warning(f"Failed to update risk_point {riskpoint.get('id')} due to: {e}")
     @task
     def enrich_riskpoints_with_flood_sensor():
-        engine,metadata=setup_engine_and_metadata()
-        riskpoint_table=metadata.tables.get("risk_points")
+        engine, metadata = setup_engine_and_metadata()
+        riskpoint_table = metadata.tables.get("risk_points")
+        csv_path=os.getenv("RISK_MAPPED_FLOOD_SENSOR_CSV_PATH")
+        df = pd.read_csv(csv_path)
 
-        with engine.connect() as conn:
-            # fetchALL risk points
-            all_riskpoints=conn.execute(select(riskpoint_table)).mappings().all()
+        # only those with a valid sensor_id
+        mapped_df = df[df["sensor_id"].notna()]
+        mapped_ids = mapped_df["risk_id"].astype(int).tolist()
 
-            # load sensor rows
-            sensor_rows=get_sensors(engine, metadata,sensor_table="flood_sensor")
-            for riskpoint in all_riskpoints:
-               logging.info(f"The risk point is {riskpoint}")
-               try:
-                    closest_sensor_id, closest_sensor_code, min_distance = get_distance_between_riskpoint_and_sensors(
-                        riskpoint, "flood_sensor", sensor_rows
-                    )
-                    logging.info(f"closes sensor_id :{closest_sensor_id}, {closest_sensor_code} and {min_distance}")
+        with engine.begin() as conn:
+            # set unmapped risk points to NULL
+            conn.execute(
+                update(riskpoint_table)
+                .where(~riskpoint_table.c.objectid.in_(mapped_ids))
+                .values(
+                    road_flood_sensor_id=None,
+                    closest_road_flood_sensor_code=None,
+                    closest_road_flood_sensor_distance=None
+                )
+            )
 
-                    # Update riskpoint row with closest rainfall_sensor_id
-                    update_stmt = (
+            # update mapped risk points
+            for _, row in mapped_df.iterrows():
+                sensor_id = int(row["sensor_id"])
+                code = row["code"] if pd.notna(row["code"]) else None
+                distance = float(row["distance_to_sensor_m"]) if pd.notna(row["distance_to_sensor_m"]) else None
+
+                try:
+                    conn.execute(
                         update(riskpoint_table)
-                        .where(riskpoint_table.c.id == riskpoint["id"])
+                        .where(riskpoint_table.c.objectid == int(row["risk_id"]))
                         .values(
-                            road_flood_sensor_id=closest_sensor_id,
-                            closest_road_flood_sensor_code=closest_sensor_code,
-                            closest_road_flood_sensor_distance=min_distance
-                            )
+                            road_flood_sensor_id=sensor_id,
+                            closest_road_flood_sensor_code=code,
+                            closest_road_flood_sensor_distance=distance
+                        )
                     )
-                    conn.execute(update_stmt)
-                    logging.info(f"Updated risk_point {riskpoint['id']} with sensor {closest_sensor_id}")
-
-               except Exception as e:
-                    logging.warning(f"Failed to update risk_point {riskpoint.get('id')} due to: {e}")
-
-
+                except Exception as e:
+                    logging.warning(f"Failed to update risk_point {row['risk_id']} due to: {e}")
     fetch_and_store_riskpoint_metadata() >>enrich_riskpoints_with_rainfall_sensor() >> enrich_riskpoints_with_flood_sensor()
 
 

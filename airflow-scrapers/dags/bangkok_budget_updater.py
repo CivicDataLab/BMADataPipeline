@@ -106,6 +106,8 @@ def update_and_store_budget():
             fiscal_years.append(str(year).zfill(2))
         logging.info(f"Will update fiscal years: {fiscal_years}")
         base_url=os.getenv("BMA_MIS_API_URL")
+        if not base_url:
+             raise ValueError("Missing environment variables")
         default_params={
             "source_id":     "01",
             "book_id":       "0",
@@ -135,7 +137,3 @@ def update_and_store_budget():
     updater()
 
 update_and_store_budget()
-                                
-                        
-                
-        

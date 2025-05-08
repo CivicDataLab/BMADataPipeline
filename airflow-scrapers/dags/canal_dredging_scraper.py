@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from airflow.decorators import dag, task
 import logging
 import pendulum
-from pendulum.tz.timezone import Timezone
+from utils.buddhist_year_converter_utils import get_bangkok_date_info
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.canals_translation_map_utils import thai_to_column_mapping
 load_dotenv()
@@ -18,13 +18,10 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-
-BMA_WEATHER_API_URL_NEW=os.getenv("BMA_WEATHER_API_URL_NEW")
-BANGKOK_TIMEZONE=Timezone("Asia/Bangkok")
 @dag(
     dag_id="canal_dredging_scraper",
     schedule="0 0 1,16 * *", #runs every 1st and 16th day forever
-    start_date=pendulum.datetime(2025,4,23, tz="local"),
+    start_date=pendulum.datetime(2025,4,23, tz="Asia/Bangkok"),
     catchup=False,
     tags=['api', 'bangkok', 'canal_dredging_progress_report']
 )
@@ -34,19 +31,19 @@ def canal_dredging_pipeline():
     @task()
     def fetch_and_store_canal_dredging_progress():
         weather_api_key=os.getenv("BMA_WEATHER_API_KEY")
-        if not weather_api_key:
+        base_url=os.getenv("BMA_WEATHER_API_URL_NEW")
+        if not all ([base_url, weather_api_key]):
             raise ValueError("Missing one or more database environment variables.")
         
         headers={
             "KeyId":weather_api_key
         }
-        current_date=pendulum.now(tz="Asia/Bangkok")
-        date=current_date.date
-        month=current_date.month
-        buddhist_year=current_date.year+543
-        
-        period='01-15' if date ==1 else '16-30' if date==16 else '16-30'
-        canal_dredging_api_url=f"{BMA_WEATHER_API_URL_NEW}/ProgressReport/DDS?ReportType=02&Period={period}&Month={month}&Year={buddhist_year}"
+        current_date, current_month, buddhist_year=get_bangkok_date_info()
+        # fetch for previous month's progress report instead
+        # think about dedup logic incase manual trigger
+        previous_month=12 if current_month==1 else current_month-1
+        period='01-15' if 1<=current_month<=15 else '16-30'
+        canal_dredging_api_url=f"{base_url}/ProgressReport/DDS?ReportType=02&Period={period}&Month={previous_month}&Year={buddhist_year}"
 
         def transform_canal_dredging_data(data):
             transformed_data=[]

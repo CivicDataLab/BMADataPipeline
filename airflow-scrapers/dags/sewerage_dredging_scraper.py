@@ -9,6 +9,7 @@ import logging
 import pendulum
 from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from utils.canals_translation_map_utils import thai_to_column_mapping_street_cleaning
+from utils.buddhist_year_converter_utils import get_bangkok_date_info
 load_dotenv()
 
 logging.basicConfig(
@@ -16,8 +17,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-
-BMA_WEATHER_API_URL_NEW=os.getenv("BMA_WEATHER_API_URL_NEW")
 @dag(
     dag_id="sewarage_dredging_scraper",
     schedule="0 0 1,16 * *", #runs every 1st and 16th day of month 
@@ -31,16 +30,18 @@ def sewarage_dredging_pipeline():
     @task()
     def fetch_and_store_sewerage_dredging_progress():
         weather_api_key=os.getenv("BMA_WEATHER_API_KEY")
-        if not weather_api_key:
+        base_url=os.getenv("BMA_WEATHER_API_URL_NEW")
+        if not all ([weather_api_key, base_url]):
             raise ValueError("Missing one or more database environment variables.")
         
         headers={
             "KeyId":weather_api_key
         }
-        current_date=pendulum.now(tz="Asia/Bangkok")
-        buddhist_year,month,date=current_date.year+543, current_date.month, current_date.date
-        period='01-15' if date ==1 else '16-30' if date==16 else '16-30'
-        canal_dredging_api_url=f"{BMA_WEATHER_API_URL_NEW}/ProgressReport/DDS?ReportType=01&Period={period}&Month={month}&Year={buddhist_year}"
+        
+        current_date, current_month, buddhist_year=get_bangkok_date_info()
+        previous_month=12 if current_month==1 else current_month-1
+        period='01-15' if 1<=current_month<=15 else '16-30'
+        canal_dredging_api_url=f"{base_url}/ProgressReport/DDS?ReportType=01&Period={period}&Month={previous_month}&Year={buddhist_year}"
 
         def transform_sewarage_dredging_data(data):
             transformed_data=[]

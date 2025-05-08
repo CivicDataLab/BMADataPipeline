@@ -21,7 +21,7 @@ logging.basicConfig(
 
 @dag(
     dag_id="traffy_fondue_citizen_complaint_scraper",
-    schedule="0 1 * * *", #runs every one hour everyday
+    schedule="59 23 * * *", #runs at the end of the day 
     start_date=pendulum.datetime(2025,4,24, tz="Asia/Bangkok"),
     catchup=False,
     tags=['api', 'bangkok', 'traffy_fondue_complaint_scraper']
@@ -32,8 +32,12 @@ def traffy_fondue_citizen_complaint_pipeline():
     @task()
     def fetch_and_store_traffy_fondue_citizen_progress():
         base_url=os.getenv("TRAFFY_FONDUE_CITIZEN_COMPLAINT_URL")
+
+        if not base_url:
+            raise ValueError("Missing one or more environment variables.")
         dt=pendulum.now().to_date_string()
-        api_url=f"{base_url}&start=2025-04-01&end=2025-04-30"
+        # get all traffy fondue details for the same day
+        api_url=f"{base_url}&start={dt}&end={dt}"
         def transform_func(data):
             transformed_data=[]
             try:
