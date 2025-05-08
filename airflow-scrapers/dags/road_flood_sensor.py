@@ -47,6 +47,9 @@ def road_flood_sensor_pipeline():
         base_url=os.getenv("BMA_WEATHER_API_URL_NEW")
         api_url=f"{base_url}/flood/fetch-and-save-data/sensor-flood-latest-record?limit=300"
         api_key=os.getenv("BMA_WEATHER_API_KEY")
+
+        if not all([base_url,api_url,api_key]):
+            raise ValueError("Missing one or more environment variables")
         headers={
                 "KeyId":api_key
             }

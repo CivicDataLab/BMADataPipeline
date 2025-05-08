@@ -154,7 +154,7 @@ def road_flood_sensor_pipeline():
                     )
 
         except Exception as e:
-            logging.error(f"Some error occured in rain_fall_summary scraper :{str(e)}") 
+            raise ValueError("Some exception occured in flood summary scraper")
 
 
 

@@ -30,7 +30,7 @@ logging.basicConfig(
     tags=['api', 'bangkok', 'flood_sensor'],
 )
 def rainfall_sensor_location_pipeline():
-
+    
 
     @task()
     def fetch_and_store_rainfall_sensor_details():
@@ -62,12 +62,13 @@ def rainfall_sensor_location_pipeline():
         weather_api_key=os.getenv("BMA_WEATHER_API_KEY")
         base_url=os.getenv("BMA_WEATHER_API_URL_NEW")
         api_url=f"{base_url}/rain/lastdata"
+        if not all([db_host, db_user, db_password, db_name, db_port,weather_api_key,base_url,api_url]):
+            raise ValueError("Missing one or more database env variables")
+
         headers={
             "KeyId":weather_api_key
         }
-        if not all([db_host, db_user, db_password, db_name, db_port]):
-            raise ValueError("Missing one or more database env variables")
-
+        
     # fetch sensor → id map
         sensor_map = {}
         conn = psycopg2.connect(

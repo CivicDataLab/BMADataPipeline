@@ -1,5 +1,5 @@
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, func, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, func, ForeignKey,UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 import pendulum
 
@@ -7,9 +7,11 @@ Base = declarative_base()
 
 class BangkokBudget(Base):
     __tablename__ = 'bangkok_budget'
-
+    __table_args__=(
+        UniqueConstraint('mis_id',  name='uq_bangkok_budget_mis_id'),
+    )
     id = Column(Integer, primary_key=True)
-    mis_id = Column(String(255),nullable=True)
+    mis_id = Column(String(255),nullable=True, unique=True, index=True)
     department_name = Column(String(255))
     sector_name = Column(String(255))
     program_name = Column(String(255))
@@ -63,6 +65,8 @@ class BangkokBudget(Base):
         server_default=func.now(),
         onupdate=func.now())
     raw_data = Column(JSONB)
+
+
 
 class RainfallSensor(Base):
     __tablename__ = 'rainfall_sensor'

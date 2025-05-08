@@ -6,17 +6,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import json
 import logging
 import pendulum
-
+import requests
 from dotenv import load_dotenv
 from urllib.parse import urlencode
 from airflow.decorators import dag, task
 from airflow.models import Variable
-from plugins.operators.api_to_postgres_operator import ApiToPostgresOperator
 from include.api_utils import get_bma_api_auth
-from include.superset_utils import create_superset_dataset
-from utils.translation_ner_geocoding import extract_entities_from_thai_text
-from dags.bangkok_budget_updater import pad
-
+# from utils.translation_ner_geocoding import extract_entities_from_thai_text
+from utils.db_utils import setup_engine_and_metadata
+from sqlalchemy.dialects.postgresql import insert
+from utils.buddhist_year_converter_utils import get_bangkok_date_info
 
 load_dotenv()
 
@@ -24,10 +23,13 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
+def pad(val,width):
+    s=str(val) if val not in (None, "") else ""
+    return s.zfill(width)
 
 @dag(
     dag_id='bangkok_budget_scraper',
-    schedule='0 0 1 * *',  # runs on first of every month forever
+    schedule='0 0 1 * *',  # runs on first of every month forever   
     start_date=pendulum.datetime(2025, 3, 22, tz="Asia/Bangkok"),
     catchup=False,
     tags=['api', 'postgres', 'bangkok', 'budget'],
@@ -35,17 +37,23 @@ logging.basicConfig(
 def bangkok_budget_scraper_pipeline():
 
     @task()
-    def fetch_and_store_budget_data():
-        budget_mis_api_url=os.getenv("BMA_MIS_API_URL")
-     
-        current_date=pendulum.now(tz="local")
-        buddhist_year=current_date.year+543
-        fiscal_year_last_two_chars=buddhist_year%100
+    def upsert_budget():
+
+        engine,metadata=setup_engine_and_metadata()
+        budget_table=metadata.tables["bangkok_budget"]
+
+        base_url=os.getenv("BMA_MIS_API_URL")
+
+        if not base_url:
+            raise ValueError("Missing environment variables")
+        
+        _, _, buddhist_year=get_bangkok_date_info()
+        fiscal_suffix=buddhist_year%100
         default_api_params = {
             'source_id': '01',
             'book_id': '0',
-            'fiscal_year': fiscal_year_last_two_chars,
-            'department_id': '11000000', #For drainage buruue level
+            'fiscal_year': fiscal_suffix,
+            'department_id': '11000000',
             
         }
         try:
@@ -55,45 +63,39 @@ def bangkok_budget_scraper_pipeline():
         except Exception as e:
             logging.info(f"Using default Bangkok budget parameters due to: {e}")
 
-        def transform_budget_translation_data(data):
+        auth=get_bma_api_auth()
 
-            transformed_data = []
+        
+
+        for exp_id in ["05", "07"]:
+            params={
+                **default_api_params, "exp_object_id":exp_id
+            }
+            url=f"{base_url}?{urlencode(params)}"
+            logging.info("Fetching URL: %s", url)
+            # build MISID
             
-            logging.info(f"Received {len(data)} items from the API")
-            if data:
-                logging.info(f"First item sample: {json.dumps(data[0], ensure_ascii=False)}")
-            for item in data:
-                original_text = item.get("DETAIL", item.get("detail", ""))
-                if not original_text:
-                    continue
-                # NER+Translation
-                result = {}
-                max_retries = 3
-                for attempt in range(max_retries):
-                    try:
-                        time.sleep(1)  # avoid timeout from Claude
-                        result = extract_entities_from_thai_text(original_text)
-                        break
-                    except Exception as e:
-                        logging.warning(f"Attempt {attempt+1} failed: {e}")
-                        if attempt == max_retries - 1:
-                            logging.warning(f"NER translation failed permanently for item: {original_text}")
-                            continue
-                # build MISID
-                
-                fy    = fiscal_year_last_two_chars
-                dept  = pad(item.get("DEPARTMENT_ID"),8)
-                func  = pad(item.get("FUNC_ID"),6)
-                year  = pad(item.get("FUNC_YEAR"),2)
-                seq   = pad(item.get("FUNC_SEQ"),2)
-                obj   = pad(item.get("EXP_OBJECT_ID"),2)
-                sub   = pad(item.get("EXP_SUBOBJECT_ID"),2)
-                exp   = pad(item.get("EXPENDITURE_ID"),2)
-                itm   = pad(item.get("ITEM_ID"),3)
+            response=requests.get(url, auth=auth, timeout=120)
+            response.raise_for_status()
+            data=response.json() 
+            transformed_records = []
 
-                mis_id = fy+dept+func+year+seq+obj+sub+exp+itm
+            for item in data:
+                parts = [
+                        pad(fiscal_suffix, 2),
+                        pad(item.get("DEPARTMENT_ID"), 8),
+                        pad(item.get("FUNC_ID"), 6),
+                        pad(item.get("FUNC_YEAR"), 2),
+                        pad(item.get("FUNC_SEQ"), 2),
+                        pad(item.get("EXP_OBJECT_ID"), 2),
+                        pad(item.get("EXP_SUBOBJECT_ID"), 2),
+                        pad(item.get("EXPENDITURE_ID"), 2),
+                        pad(item.get("ITEM_ID"), 3),
+                    ]
+
+                mis_id = "".join(parts)
                 logging.info(f"The current mis id is: {mis_id}")
-                transformed_record = {
+                record = {
                     "mis_id":mis_id,
                     "department_name": item.get("DEPARTMENT_NAME", ""),
                     "sector_name": item.get("SECTOR_NAME", ""),
@@ -134,58 +136,34 @@ def bangkok_budget_scraper_pipeline():
                     "contract_amount": item.get("CONTRACT_AMOUNT", ""),
                     "pur_hire_method": item.get("PUR_HIRE_METHOD", ""),
                     "egp_project_code": item.get("EGP_PROJECT_CODE", ""),
-                    "egp_po_control_code": item.get("EGP_PO_CONTROL_CODE", ""),
-                    "original_text": original_text,
-                    "translation": result.get("translation"),
-                    "entities": result.get("entities"),
-                    "geocoding_of": result.get("geocoding_of"),
-                    "lat": result.get("lat"),
-                    "lon": result.get("lon"),
                     "raw_data": json.dumps(item)
                 }
 
-                transformed_data.append(transformed_record)
+                transformed_records.append(record)
 
-            if not transformed_data:
-                raise ValueError("No data was transformed. Check API response and transformation step.")
-
-            logging.info(f"Transformed {len(transformed_data)} records with NER + geocoding")
-            return transformed_data
-        for exp_id in ['05','07']:
-            params={**default_api_params, 'exp_object_id':exp_id}
-            qs=urlencode(params)
-            api_url=f"{budget_mis_api_url}?{qs}"
-            logging.info(f"Fetching budget data for ex_object_id={exp_id}=>{api_url}")
-
-
-            operator = ApiToPostgresOperator(
-                task_id        = f'fetch_bangkok_budget_data_{exp_id}',
-                api_url        = api_url,
-                table_name     = 'bangkok_budget',
-                transform_func = transform_budget_translation_data,
-                auth_callable  = get_bma_api_auth,
-                db_type        = 'BMA'
+            if not transformed_records:
+                logging.info(f"No records to upsert for exp_object_id: {exp_id}")
+                continue
+            insert_statement=insert(budget_table).values(transformed_records)
+            # explicitly exclude the mapping
+            excluded=insert_statement.excluded
+            update_mapping={}
+            for col in budget_table.columns:
+                if col.name=="id":
+                    continue
+                # on conflict, set table.col=Excluded.col
+                update_mapping[col.name]=getattr(excluded,col.name)
+            upsert_stmt=insert_statement.on_conflict_do_update(
+                index_elements=["mis_id"],
+                set_=update_mapping
             )
-            operator.execute(context={})
+            with engine.begin() as conn:
+                conn.execute(upsert_stmt)
 
-    @task
-    def update_and_store_budget_data():
-        """Fetches all data budget data from the budget table and updates columns"""
-        
 
-    @task()
-    def create_superset_dataset_task():
-        table_name = 'bangkok_budget'
-        db_type = 'BMA'
-        schema = 'public'
-        logging.info(f"Creating Superset dataset for {table_name} using db_type={db_type}")
-        success = create_superset_dataset(table_name, db_type, schema)
+            logging.info(f"Transformed {len(transformed_records)} records with NER + geocoding")
 
-        if success:
-            logging.info(f"Successfully created Superset dataset for {table_name}")
-        else:
-            logging.warning(f"Failed to create Superset dataset for {table_name}")
 
-    fetch_and_store_budget_data() >> create_superset_dataset_task()
+    upsert_budget() 
 
 bangkok_budget_scraper_pipeline()

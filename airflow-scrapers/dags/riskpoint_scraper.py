@@ -36,8 +36,8 @@ def riskpoint_pipeline():
     def fetch_and_store_riskpoint_metadata():
         riskpoint_api_key=os.getenv("BMA_WEATHER_API_KEY")
         api_url= os.getenv("BMA_RISK_POINT_URL_NEW")
-        if not riskpoint_api_key:
-            raise ValueError("Missing one or more database environment variables.")
+        if not all ([riskpoint_api_key, api_url]):
+            raise ValueError("Missing one or more  environment variables.")
         
         headers={
             "KeyId":riskpoint_api_key
