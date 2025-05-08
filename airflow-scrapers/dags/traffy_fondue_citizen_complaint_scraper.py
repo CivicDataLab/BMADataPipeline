@@ -21,7 +21,7 @@ logging.basicConfig(
 
 @dag(
     dag_id="traffy_fondue_citizen_complaint_scraper",
-    schedule="0 1 * * *", #runs every one hour everyday
+    schedule="0 * * * *", #runs every one hour everyday
     start_date=pendulum.datetime(2025,4,24, tz="Asia/Bangkok"),
     catchup=False,
     tags=['api', 'bangkok', 'traffy_fondue_complaint_scraper']

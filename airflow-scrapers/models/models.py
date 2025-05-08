@@ -110,7 +110,7 @@ class RainfallSensorStreamingData(Base):
     rf1hr=Column(Float, nullable=True)
     rf3hr=Column(Float, nullable=True)
     rf6hr=Column(Float, nullable=True)
-    rf12hr=Column(Float, nullable=True)
+    rf12rh=Column(Float, nullable=True)
     rf24rh     = Column(Float,   nullable=True)
     site_time  = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
@@ -335,7 +335,7 @@ class FloodSensorStreamingData(Base):
     date_created      = Column(DateTime(timezone=True))
     sensor_name       = Column(String(255))
     value             = Column(Float)
-    record_time=Column(DateTime(timezone=True))
+    record_time       = Column(DateTime)
     sensor_profile_id = Column(Integer)
     district          = Column(String(255))
     name              = Column(String(255))
@@ -380,4 +380,20 @@ class RainfallAndFloodSummary(Base):
     rainfall_sensor_code=Column(String(255))
     rf1hr=Column(Float)
     
-    
+# test table, delete after testing
+
+class RainAndFloodSummary2(Base):
+    __tablename__='rainfall_and_flood_summary_2'
+    id=Column(Integer, primary_key=True)
+    risk_id=Column(Integer)
+    risk_name=Column(String(255))
+    category=Column(String(255))
+    district=Column(String(255))
+    flood_sensor_code=Column(String(255))
+    flood_code=Column(String(255))
+    hour=Column(DateTime(timezone=True))
+    max_flood=Column(Float)
+    flood_duration_minutes=Column(Float)
+    flood_drain_rate_in_cm_minutes=Column(Float)
+    rainfall_sensor_code=Column(String(255))
+    rf1hr=Column(Float)

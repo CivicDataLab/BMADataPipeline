@@ -11,7 +11,6 @@ import pendulum
 import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor
-
 load_dotenv()
 
 
@@ -26,7 +25,7 @@ logging.basicConfig(
 @dag(
     dag_id='rainfall_sensor',
     schedule='0 * * * *',  # every hour
-    start_date=pendulum.datetime(2025, 4, 16, tz="UTC"),
+    start_date=pendulum.datetime(2025, 4, 16, tz="Asia/Bangkok"),
     catchup=False,
     tags=['api', 'bangkok', 'flood_sensor'],
 )
@@ -69,6 +68,8 @@ def rainfall_sensor_location_pipeline():
         if not all([db_host, db_user, db_password, db_name, db_port]):
             raise ValueError("Missing one or more database env variables")
 
+    # fetch sensor → id map
+        sensor_map = {}
         conn = psycopg2.connect(
             host=db_host,
             dbname=db_name,
@@ -76,25 +77,17 @@ def rainfall_sensor_location_pipeline():
             port=db_port,
             password=db_password
         )
-
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("SELECT code, id FROM rainfall_sensor;")
-            sensors = cursor.fetchall()
-        for sensor in sensors:
-            code=sensor["code"]
-            sensor_id=sensor.get("id")
-            
+            for r in cursor.fetchall():
+                sensor_map[r["code"]] = r["id"]
+        conn.close()
 
-            def transform_with_fk(data):
-                
-                for row in data:
-                    if row["code"]==code:
+        def transform_with_fk(data):
+            for row in data:
+                row["sensor_id"] = sensor_map.get(row.get("code"))
+            return data
 
-                        row["sensor_id"]=sensor_id
-                    else:
-                        continue
-
-                return data
         operator = ApiToPostgresOperator(
             task_id="fetch_streaming_data",
             api_url=api_url,

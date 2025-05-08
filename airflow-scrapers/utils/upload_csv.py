@@ -32,7 +32,7 @@ def setup_engine_and_metadata():
     metadata.reflect(bind=engine)
     return engine, metadata
 
-def main():
+def upload_large_csv_file():
     engine, _ = setup_engine_and_metadata()
     csv_path = os.getenv("CSV_FILE_PATH", "rainfall_and_flood_summary.csv")
 
@@ -74,6 +74,11 @@ def main():
             cursor.close()
 
     engine.dispose()
+
+def upload_
+def main():
+    return False
+  
 
 if __name__ == "__main__":
     main()
