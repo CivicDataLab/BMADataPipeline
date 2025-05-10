@@ -4,8 +4,8 @@ import logging
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
-from models.models import RainfallAndFloodSummary 
-
+from models.models import CanalDredgingProgress 
+from utils.canals_translation_map_utils import thai_to_column_mapping
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -32,53 +32,54 @@ def setup_engine_and_metadata():
     metadata.reflect(bind=engine)
     return engine, metadata
 
-def upload_large_csv_file():
+def upload_large_canal_csv_file():
+    # 1. get engine & table name
     engine, _ = setup_engine_and_metadata()
-    csv_path = os.getenv("CSV_FILE_PATH", "rainfall_and_flood_summary.csv")
+    table_name = CanalDredgingProgress.__tablename__
+    csv_path   = os.getenv("CSV_FILE_PATH", "canal_dredging_progress.csv")
 
-    # Build the COPY SQL (no HEADER, we skip it manually)
+    # 2. read & parse the header line
+    with open(csv_path, newline='', encoding="utf-8-sig") as f:
+        header_line = f.readline().strip()
+    csv_headers = [h.strip() for h in header_line.split(',')]
+
+    # 3. map to English, skipping any unmapped column
+    english_cols = []
+    for h in csv_headers:
+        eng = thai_to_column_mapping.get(h)
+        if eng:
+            english_cols.append(eng)
+        else:
+            logging.debug(f"Skipping unmapped CSV column: {h}")
+
+    if not english_cols:
+        raise RuntimeError("No CSV columns mapped – check your CSV headers vs mapping")
+
+    # 4. build COPY statement
     copy_sql = f"""
-        COPY {RainfallAndFloodSummary.__tablename__}
-        (risk_id,
-         risk_name,
-         category,
-         district,
-         flood_sensor_code,
-         flood_code,
-         hour,
-         max_flood,
-         flood_duration_minutes,
-         rainfall_sensor_code,
-         rf1hr)
+        COPY {table_name} ({', '.join(english_cols)})
         FROM STDIN
         WITH CSV
         DELIMITER ','
     """
 
+    # 5. stream into the table
     with engine.connect() as conn:
-        # Get at the raw DBAPI connection & cursor
-        dbapi_conn = conn.connection
-        cursor = dbapi_conn.cursor()
-
+        raw_conn = conn.connection      # psycopg2 connection
+        cur      = raw_conn.cursor()
         try:
-            with open(csv_path, "r") as f:
-                # Skip the header line ("risk_id,risk_name,…,rain_code,rf1hr")
-                f.readline()
-                # Stream the rest into COPY
-                cursor.copy_expert(copy_sql, f)
-
-            # Commit once all data is in
-            dbapi_conn.commit()
-            logging.info("Finished bulk COPY into rainfall_and_flood_summary")
+            with open(csv_path, 'r', encoding="utf-8-sig") as f:
+                f.readline()             # skip header row
+                cur.copy_expert(copy_sql, f)
+            raw_conn.commit()
+            logging.info(f"Finished bulk COPY into {table_name}")
         finally:
-            cursor.close()
+            cur.close()
 
     engine.dispose()
 
 
-def main():
-    return False
   
 
 if __name__ == "__main__":
-    main()
+    upload_large_canal_csv_file()
